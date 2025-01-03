@@ -37,7 +37,7 @@ Version 1 ... actually, I never moved beyond version 0.5.2 ... was a fully UI-ed
 
 ### What's new in Version 2
 
-I realised that this could just be a single file solution<sup>*</sup>.  So I re-wrote it from scratch to be so.  So, Version 2, is one file, install it on you service, create a sorts "database" - a JSON file - and it works.  Done.
+I realised that this could just be a single file solution<sup>*</sup>.  So I re-wrote it from scratch to be so.  So, Version 2, is one file, install it on your service, create a sorts "database" - a JSON file - and... it works.  Done.
 
 To edit, add, remove stuff; just edit the JSON file.  If you need to do this daily... then this is not the tool for you.
 
@@ -58,4 +58,4 @@ Please reach me via a PR to the core repo.
 
 I hope you enjoy learning, or even using, this source.
 
-> Made with &#x2665; by [Vino Rodrigues](https://github.com/vinorodrigues)
+> Made with &#x2665; by [Silvino Rodrigues](https://github.com/silvinor)

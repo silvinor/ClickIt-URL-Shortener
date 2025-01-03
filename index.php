@@ -1,7 +1,7 @@
 <?php
 /**
  * @package    c1k.it
- * @author     Vino Rodrigues (@vinorodrigues)
+ * @author     Silvino Rodrigues (@silvinor)
  * @copyright  (c) 2024 - See LICENSE.md for copyright notice and details.
  * @license    MIT
  */
@@ -35,8 +35,8 @@ $config = [
   'default_title' => 'c1k.it',
   // Thanks to https://www.srihash.org/ for the SRI Hash Generator
   'bootstrap_css' => [
-    'url' => 'https://cdn.jsdelivr.net/gh/vinorodrigues/bootstrap-dark@0.6.1/dist/bootstrap-dark.min.css',
-    'hash' => 'sha384-GrGBtUiVQd0B0YKF+fKYa7+UY5kc/9N8AvsG1+zcHqslLuITk8fKygUaYv6TnGQ9'
+    'url' => 'assets/css/bootstrap-dark.min.css',
+    'hash' => ''
   ],
   'fontawesome_css' => [
     'url' => 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css',
@@ -63,7 +63,7 @@ $config = [
     'url' => 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js',
     'hash' => 'sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp'
   ],
-  'copyright' => '&copy; 2011-2024 Vino Rodrigues | <a href="https://github.com/vinorodrigues/clickit-url-shortener"><i class="fa-brands fa-github-alt"></i> ClickIt-URL-Shortener</a>'
+  'copyright' => '&copy; 2011-2025 Silvino Rodrigues | <a href="https://github.com/silvinor/clickit-url-shortener"><i class="fa-brands fa-github-alt"></i> ClickIt-URL-Shortener</a>'
 ];
 
 /* --------- Static content --------- */
@@ -427,7 +427,7 @@ $command = $promise = $content = $short = $url = $expiry = false;
 $config = (object) $config;
 if (!isset($urls)) $urls = false;
 
-header('X-Powered-By: ClickIt-URL-Shortener, by Vino Rodrigues (@vinorodrigues)', true);
+header('X-Powered-By: ClickIt-URL-Shortener, by Silvino Rodrigues (@silvinor)', true);
 
 /*
  * Note: Data will always load from in-file '$config->json_data_filename',
@@ -777,9 +777,9 @@ switch ($command) {
   }
 }</code></pre>
   </p>
-  <p>Read the docs <a target="_blank" href="https://github.com/vinorodrigues/clickit-url-shortener/blob/master/docs/readme.md">here</a>.</p>';
+  <p>Read the docs <a target="_blank" href="https://github.com/silvinor/clickit-url-shortener/blob/master/docs/readme.md">here</a>.</p>';
 
-    $href = 'https://github.com/vinorodrigues/clickit-url-shortener';
+    $href = 'https://github.com/silvinor/clickit-url-shortener';
     $href = '';
     $btn_text = '<i class="fa-brands fa-github-alt"></i> View project';
     $color = 'info';

@@ -32,7 +32,7 @@ In this file you can store your redirections, like so:
 ```json
 {
   "urls": {
-    "code": "https://github.com/vinorodrigues/clickit-url-shortener"
+    "code": "https://github.com/silvinor/clickit-url-shortener"
   }
 }
 ```
@@ -105,4 +105,4 @@ By default, if you open the redirector without a short code it will show you a "
 
 That's it for now.  Have fun!  ;)
 
-> Made with &#x2665; by [Vino Rodrigues](https://github.com/vinorodrigues)
+> Made with &#x2665; by [Silvino Rodrigues](https://github.com/silvinor)
