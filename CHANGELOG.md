@@ -40,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added better base URL processing, with a `$config->base_url` override that can be set in the settings JSON
-- Added [Docs](https://github.com/vinorodrigues/ClickIt-URL-Shortener/tree/master/docs) to the repo
+- Added [Docs](https://github.com/silvinor/ClickIt-URL-Shortener/tree/master/docs) to the repo
 - Allow injection of custom CSS and JS, through the settings JSON
 
 ### Removed
@@ -121,15 +121,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 -----
-> Made with &#x2665; by [Vino Rodrigues](https://github.com/vinorodrigues)
+> Made with &#x2665; by [Silvino Rodrigues](https://github.com/silvinor)
 
 
-[v2.0.0]: https://github.com/vinorodrigues/ClickIt-URL-Shortener/compare/v2.0.0-beta-2...v2.0.0
-[v2.0.0-beta-2]: https://github.com/vinorodrigues/ClickIt-URL-Shortener/compare/v2.0.0-beta-1...v2.0.0-beta-2
-[v2.0.0-beta-1]: https://github.com/vinorodrigues/ClickIt-URL-Shortener/compare/v0.5.3...HEAD
-[Abandoned]: https://github.com/vinorodrigues/ClickIt-URL-Shortener/releases/tag/v0.5.3
-[v0.5.0-beta]: https://github.com/vinorodrigues/ClickIt-URL-Shortener
-[v0.4.0-beta]: https://github.com/vinorodrigues/ClickIt-URL-Shortener
-[v0.3.0-beta]: https://github.com/vinorodrigues/ClickIt-URL-Shortener
-[v0.2.0-beta]: https://github.com/vinorodrigues/ClickIt-URL-Shortener
-[v0.1.0-beta]: https://github.com/vinorodrigues/ClickIt-URL-Shortener
+[v2.0.0]: https://github.com/silvinor/ClickIt-URL-Shortener/compare/v2.0.0-beta-2...v2.0.0
+[v2.0.0-beta-2]: https://github.com/silvinor/ClickIt-URL-Shortener/compare/v2.0.0-beta-1...v2.0.0-beta-2
+[v2.0.0-beta-1]: https://github.com/silvinor/ClickIt-URL-Shortener/compare/v0.5.3...HEAD
+[Abandoned]: https://github.com/silvinor/ClickIt-URL-Shortener/releases/tag/v0.5.3
+[v0.5.0-beta]: https://github.com/silvinor/ClickIt-URL-Shortener
+[v0.4.0-beta]: https://github.com/silvinor/ClickIt-URL-Shortener
+[v0.3.0-beta]: https://github.com/silvinor/ClickIt-URL-Shortener
+[v0.2.0-beta]: https://github.com/silvinor/ClickIt-URL-Shortener
+[v0.1.0-beta]: https://github.com/silvinor/ClickIt-URL-Shortener

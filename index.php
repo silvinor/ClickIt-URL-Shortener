@@ -1,7 +1,7 @@
 <?php
 /**
  * @package    c1k.it
- * @author     Vino Rodrigues (@vinorodrigues)
+ * @author     Silvino Rodrigues (@silvinor)
  * @copyright  (c) 2024 - See LICENSE.md for copyright notice and details.
  * @license    MIT
  */
@@ -35,8 +35,8 @@ $config = [
   'default_title' => 'c1k.it',
   // Thanks to https://www.srihash.org/ for the SRI Hash Generator
   'bootstrap_css' => [
-    'url' => 'https://cdn.jsdelivr.net/gh/vinorodrigues/bootstrap-dark@0.6.1/dist/bootstrap-dark.min.css',
-    'hash' => 'sha384-GrGBtUiVQd0B0YKF+fKYa7+UY5kc/9N8AvsG1+zcHqslLuITk8fKygUaYv6TnGQ9'
+    'url' => 'assets/css/bootstrap-dark.min.css',
+    'hash' => ''
   ],
   'fontawesome_css' => [
     'url' => 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css',
@@ -63,7 +63,7 @@ $config = [
     'url' => 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js',
     'hash' => 'sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp'
   ],
-  'copyright' => '&copy; 2011-2024 Vino Rodrigues | <a href="https://github.com/vinorodrigues/clickit-url-shortener"><i class="fa-brands fa-github-alt"></i> ClickIt-URL-Shortener</a>'
+  'copyright' => '&copy; 2011-2025 Silvino Rodrigues | <a href="https://github.com/silvinor/clickit-url-shortener"><i class="fa-brands fa-github-alt"></i> ClickIt-URL-Shortener</a>'
 ];
 
 /* --------- Static content --------- */
@@ -125,6 +125,7 @@ function validateRedirectionHtmlResponseCode($code) {
  * - `@` - show QR-code
  * - `*` - show sitemap.xml, disabled if priavte
  * - `+` - pass data to a plugin
+ * - `#` - expired short
  * - `e` - show error page
  * - `h` - "hello" or "home" page
  * - `i` - "include" internal file, e.g. logo.png
@@ -236,6 +237,13 @@ function http_response_cache_now() {
   header('Last-Modified: ' . date(DATE_RFC822, $ts));
   header('Cache-Control: no-cache, must-revalidate');
   header('Pragma: no-cache' );
+}
+
+/**
+ * Sets the HTTP response headers so that the client won't ask for the resource again
+ */
+function http_response_cache_never() {
+  header('Cache-Control: max-age=31536000, immutable');
 }
 
 /**
@@ -415,14 +423,11 @@ function sanitize($string) {
 // ---------- Stuff starts here ----------
 
 // Initialize Globals
-$command = $promise = $content = $short = $url = false;
+$command = $promise = $content = $short = $url = $expiry = false;
 $config = (object) $config;
 if (!isset($urls)) $urls = false;
-if (DEBUG) {
-  $config->private = false;
-}
 
-header('X-Powered-By: ClickIt-URL-Shortener, by Vino Rodrigues (@vinorodrigues)', true);
+header('X-Powered-By: ClickIt-URL-Shortener, by Silvino Rodrigues (@silvinor)', true);
 
 /*
  * Note: Data will always load from in-file '$config->json_data_filename',
@@ -444,6 +449,7 @@ if ((false === $urls) && file_exists($config->json_data_filename)) {
 }
 
 if (DEBUG) {
+  $config->private = false;
   if (isset($config->base_url)) unset($config->base_url);
 }
 
@@ -494,11 +500,13 @@ if (in_array($command, ['u', '@']))  {
     if (false !== $dest) {
       $short = $promise;  // keep this for info and QR-code gen
       $url = false;
+      $expiry = false;
       if (is_array($dest)) {
 
         if (array_is_list($dest)) {
           $url = isset($dest[0]) ? $dest[0] : false;
           $promise = isset($dest[1]) ? $dest[1] : DEFAULT_REDIRECTION_CODE;
+          $expiry = isset($dest[2]) ? $dest[2] : false;
         } else {
           if (isset($dest['plugin']) && !empty($dest['plugin'])) {
             $url = sanitize($dest['plugin']);
@@ -515,6 +523,7 @@ if (in_array($command, ['u', '@']))  {
           $tmp = array_map('trim', explode(',', $dest));
           $url = isset($tmp[0]) ? $tmp[0] : false;
           $promise = isset($tmp[1]) ? $tmp[1] : DEFAULT_REDIRECTION_CODE;
+          $expiry = isset($tmp[2]) ? $tmp[2] : false;
         } else {
           // just a simple string
           $url = $dest;
@@ -525,6 +534,8 @@ if (in_array($command, ['u', '@']))  {
       if (false == $url) {
         $command = 'e';
         $promise = 500;
+      } else if (false !== $expiry) {
+        $expiry = strtotime($expiry);
       }
 
       if (('u' == $command) && (false !== $special)) $command = $special;
@@ -539,6 +550,13 @@ if (in_array($command, ['u', '@']))  {
       $promise = 404;
     }
   }
+}
+
+// all is good, but has it expired?
+if ((false !== $expiry) && ($expiry <= time())) {
+  $command = 'e';
+  $short = $promise;
+  $promise = 418;
 }
 
 // +-------------------------------------------------------------------------+
@@ -579,8 +597,6 @@ switch ($command) {
 
     // 'qr_content_type' => 'image/svg+xml',
     // 'qr_file_ext' => '.svg',
-
-
 
     $url = generateQRCodeURL($url, $config->qr_code_engine);
 
@@ -702,7 +718,7 @@ switch ($command) {
 
           header('Content-Type: ' . $ct, true);
           header('Content-Disposition: attachment; filename="' . $promise . '"');
-          http_response_cache_for($hold);
+          http_response_cache_for( $hold );
           print( $content );
 
           die(); // !!!
@@ -734,8 +750,13 @@ switch ($command) {
         ' target="_blank"' .
         '>' . mb_strimwidth($url, 0, 35, '...') . ' <i class="ml-2 fas fa-up-right-from-square"></i></a></div>';
     } else {
-      // TODO: Set up a expiry system, 2x features; 1. cache for x time, & 2. expiry date - after which won't work
       $cache_for = DEFAULT_CACHE_TIME;
+      if (isset($expiry) && (false !== $expiry)) {
+        $now = time();
+        $delta = $expiry - $now;
+        if ($delta < $cache_for) $cache_for = $delta;
+      }
+
       http_response_redirection($url, $promise, $cache_for);  // !!! GETS GO!
 
       die(); // !!!
@@ -756,9 +777,9 @@ switch ($command) {
   }
 }</code></pre>
   </p>
-  <p>Read the docs <a target="_blank" href="https://github.com/vinorodrigues/clickit-url-shortener/blob/master/docs/readme.md">here</a>.</p>';
+  <p>Read the docs <a target="_blank" href="https://github.com/silvinor/clickit-url-shortener/blob/master/docs/readme.md">here</a>.</p>';
 
-    $href = 'https://github.com/vinorodrigues/clickit-url-shortener';
+    $href = 'https://github.com/silvinor/clickit-url-shortener';
     $href = '';
     $btn_text = '<i class="fa-brands fa-github-alt"></i> View project';
     $color = 'info';
@@ -808,23 +829,25 @@ if ('e' == $command) { // Error page, common
   // Build string for some 4xx, and the 500 client response codes
   if (empty($content)) {
     $content .= '<h2 class="text-center"><small class="text-muted">';
-    if ($promise == 400) {
-      $content .= 'Bad Request';
-    } else if ($promise == 401) {
-      $content .= 'Unauthorized';
-    } else if ($promise == 403) {
-      $content .= 'Forbidden';
-    } else if ($promise == 404) {
-      if (!$short) {
-        $content .= 'Not Found';
-      } else {
-        $content .= 'URL not found';
-      }
-    } else if ($promise == 500) {
-      $content .= 'Internal Server Error';
-    } else if ($promise == 501) {
-      $content .= 'Not Implemented';
-      if (!empty($url)) $content .= ': <code>' . $url . '</code>';
+    switch ($promise) {
+      case 400: $content .= 'Bad Request'; break;
+      case 401: $content .= 'Unauthorized'; break;
+      case 403: $content .= 'Forbidden'; break;
+      case 404:
+        if (!$short) {
+          $content .= 'Not Found';
+        } else {
+          $content .= 'URL not found';
+        }
+        break;
+      case 410: $content .= 'Gone'; break;
+      case 418: $content .= 'Expired'; break;  // I'm a tea pot!!
+      case 500: $content .= 'Internal Server Error'; break;
+      case 501:
+        $content .= 'Not Implemented';
+        if (!empty($url)) $content .= ': <code>' . $url . '</code>';
+        break;
+      default: break;
     }
     $content .= '</small></h2>';
   }
@@ -842,7 +865,12 @@ if ('e' == $command) { // Error page, common
   }
   $inc_fa = true;
 
-  http_response_cache_now();
+  if ((410 == $promise) || (418 == $promise)) {
+    if (418 == $promise) header('HTTP/1.1 418 Expired', true, 418);  // Override I'm a teapot
+    http_response_cache_never();
+  } else {
+    http_response_cache_now();
+  }
 }
 
 /* |-------------------------------------------------------------------------|
@@ -872,6 +900,8 @@ if ('e' == $command) { // Error page, common
     .wrapper { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
     .dialog { display: flex; z-index: 100; max-width: 100%; }
     .logo { max-height: 64px; max-width: 100%; }
+    .card { border-radius: 1em !important; }
+    .card-header { border-top-left-radius: 1em !important; border-top-right-radius: 1em !important; }
     .card-body p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   </style>
 <?php if (isset($config->extra_css) && !empty($config->extra_css)) { echo $config->extra_css . PHP_EOL; } ?>
@@ -879,8 +909,8 @@ if ('e' == $command) { // Error page, common
 <body>
   <div class="wrapper">
 
-    <div class="dialog card border rounded-lg shadow-lg text-center border-<?= $color ?>" style="border-radius:1em !important">
-      <h5 class="card-header bg-light px-5 py-3 border-<?= $color ?>" style="border-top-left-radius:1em;border-top-right-radius:1em"><img src="<?= add_trailing_slash(getCurrentUrl()) . '?i=logo.svg' ?>" class="logo"></h5>
+    <div class="dialog card border rounded-lg shadow-lg text-center border-<?= $color ?>">
+      <h5 class="card-header bg-light px-5 py-3 border-<?= $color ?>"><img src="<?= add_trailing_slash(getCurrentUrl()) . '?i=logo.svg' ?>" class="logo"></h5>
       <div class="card-body text-left">
         <h1 class="card-title text-center"><?= $heading ?></h1>
         <?= $content ?>

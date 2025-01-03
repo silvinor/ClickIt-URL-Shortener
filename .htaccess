@@ -1,10 +1,13 @@
+# turn off directory browsing
+IndexIgnore *
+Options All -Indexes
+
 <files "short_urls.json">
   Order Allow,Deny
   Deny from all
 </files>
 
 <ifmodule mod_rewrite.c>
-
   Options +FollowSymLinks
   RewriteEngine On
   # RewriteBase /
@@ -16,11 +19,36 @@
   ErrorDocument 500 /index.php?e=500
 
   RewriteRule ^sitemap\.xml$ index.php?* [L,PT]
+  RewriteRule ^feed/?$ feed.xml [R=303,L]
 
   # Restrict rewriting URLs only to paths that do not actually exists
   RewriteCond %{SCRIPT_FILENAME} !-d
   RewriteCond %{SCRIPT_FILENAME} !-f
   # Redirect to script
   RewriteRule ^(.*)$ ./index.php?u=$1
-
 </ifmodule>
+
+<ifmodule mod_deflate.c>
+  # Compress HTML, CSS, JavaScript, Text, XML and fonts
+  AddOutputFilterByType DEFLATE image/svg+xml
+  AddOutputFilterByType DEFLATE application/javascript
+  AddOutputFilterByType DEFLATE application/x-javascript
+  AddOutputFilterByType DEFLATE application/xhtml+xml
+  AddOutputFilterByType DEFLATE application/xml
+  AddOutputFilterByType DEFLATE image/x-icon
+  AddOutputFilterByType DEFLATE text/css
+  AddOutputFilterByType DEFLATE text/html
+  AddOutputFilterByType DEFLATE text/javascript
+  AddOutputFilterByType DEFLATE text/plain
+  AddOutputFilterByType DEFLATE text/xml
+
+  # Remove browser bugs (only needed for really old browsers)
+  BrowserMatch ^Mozilla/4 gzip-only-text/html
+  BrowserMatch ^Mozilla/4\.0[678] no-gzip
+  BrowserMatch \bMSIE !no-gzip !gzip-only-text/html
+  Header append Vary User-Agent
+</ifmodule>
+
+Header set Access-Control-Allow-Origin "*"
+Header set Access-Control-Allow-Methods "GET"
+Header set Access-Control-Allow-Headers "Content-Type"
