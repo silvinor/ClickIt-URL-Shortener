@@ -1,17 +1,24 @@
 <?php
+
 /**
  * @package    c1k.it
  * @author     Silvino Rodrigues (@silvinor)
  * @copyright  (c) 2024 - See LICENSE.md for copyright notice and details.
  * @license    MIT
  */
+/* ╔═════════════════════════════════════════════════════════════════════════╗
+ * ║                                                                         ║
+ * ║  ClickIt-URL-Shortener, © 2024 Silvino Rodrigues                        ║
+ * ║                                                                         ║
+ * ╚═════════════════════════════════════════════════════════════════════════╝
+ */
 
 const DEFAULT_REDIRECTION_CODE = 307;
 const DEFAULT_CACHE_TIME = (24 * 60 * 60);  // 1 day, in seconds
-const DEFAULT_CURL_TIMEOUT = 10;  // in seconds
+const DEFAULT_CURL_TIMEOUT = 15;  // in seconds
 const DEBUG = false;
 
-global $config, $command, $promise, $content, $short, $url;
+global $config, $command, $promise, $content, $short, $url, $error;
 
 /*
  * You can skip using an external URLs file by populating your list right here.
@@ -128,12 +135,12 @@ function validateRedirectionHtmlResponseCode($code) {
  * - `#` - expired short
  * - `e` - show error page
  * - `h` - "hello" or "home" page
- * - `i` - "include" internal file, e.g. logo.png
+ * - `f` - "file" fetch internal file, e.g. logo.png
  * - `u` - redirect URL
  * - `x` - settings missing, show "needs install" page
  */
 function validateShortURLisNotCommand($s_url) {
-  return !in_array($s_url, ['-', '@', '*', '+', 'e', 'h', 'i', 'u', 'x']);
+  return !in_array($s_url, ['-', '@', '*', '+', 'e', 'h', 'f', 'u', 'x']);
 }
 
 /**
@@ -155,12 +162,23 @@ if (DEBUG) {
     ob_start();
     var_dump($mixed);
 
-    $ret = !$name ? '' : '<tt>' . $name . '</tt> = ';
+    $ret = !$name ? '' : '<b>' . $name . '</b> = ';
     $ret .= '<code>'. htmlspecialchars(ob_get_contents(), ENT_QUOTES) . '</code><br>';
     ob_end_clean();
     if (!$echo) return $ret;
 
     echo str_replace(['&quot;', '&gt;', '&lt;'], ['"', '>', '<'], strip_tags( $ret ));
+  }
+
+  function dump_globals() {
+    global $config, $command, $promise, $content, $short, $url, $error;
+    print( var_dump_ret($command, '$command') );
+    print( var_dump_ret($promise, '$promise') );
+    print( var_dump_ret($content, '$content') );
+    print( var_dump_ret($short, '$short') );
+    print( var_dump_ret($url, '$url') );
+    print( var_dump_ret($error, '$error') );
+    print( var_dump_ret($config, '$config') );
   }
 }
 
@@ -221,11 +239,18 @@ function getCurrentQuery() {
 function processQueryString($find) {
   global $command, $promise;
   if ($command !== false) return;  // already has one
+
+  $find = strtolower($find);
   if (isset($_REQUEST[$find])) {
-    $command = strtolower($find);
+    $command = $find;
     $promise = $_REQUEST[$find];
-    if (empty($promise)) $promise = false;
+  } else if (isset($_REQUEST[strtoupper($find)])) {
+    $command = $find;
+    $promise = $_REQUEST[strtoupper($find)];
+  } else {
+    $promise = false;
   }
+  if (empty($promise)) $promise = false;
 }
 
 /**
@@ -270,6 +295,16 @@ function http_response_cache_for($secs = 0) {
  * This is the main redirection code!!
  */
 function http_response_redirection($url, $code, $cache_for) {
+  if (DEBUG) {
+    print '<html><body>';
+    print 'Redirect to <code>' . $url . '</code><br>';
+    print '<pre><code>';
+    dump_globals();
+    print '</code></pre>';
+    print '</body></html>';
+    die();
+  }
+
   http_response_code($code);
   header('Location: ' . $url, TRUE, $code);
   http_response_cache_for($cache_for);
@@ -313,10 +348,47 @@ function generateQRCodeURL($url, $qr_code_engine) {
 }
 
 /**
+ *
+ */
+function new_file_get_contents($url) {
+  global $error;
+  $error = $curl = $data = false;
+
+  if (function_exists('curl_init')) $curl = @curl_init();  // Initialize cURL
+  if (false !== $curl) {
+    curl_setopt( $curl, CURLOPT_URL, $url );
+    curl_setopt( $curl, CURLOPT_RETURNTRANSFER, true); // Return the response as a string
+    curl_setopt( $curl, CURLOPT_FOLLOWLOCATION, true ); // Follow redirects (if any)
+    curl_setopt( $curl, CURLOPT_MAXREDIRS, 10 );
+    curl_setopt( $curl, CURLOPT_HEADER, false );
+    curl_setopt( $curl, CURLOPT_BINARYTRANSFER, true );
+    curl_setopt( $curl, CURLOPT_HTTPGET, true );
+    curl_setopt( $curl, CURLOPT_TIMEOUT, DEFAULT_CURL_TIMEOUT ); // Set a timeout in seconds
+    curl_setopt( $curl, CURLOPT_CONNECTTIMEOUT, DEFAULT_CURL_TIMEOUT );
+
+    $data = curl_exec( $curl );
+    if (false === $data) {  // fetch and dump
+      $error = 'cURL Error ' . curl_errno($curl) . ': ' . curl_error($curl);
+    }
+    curl_close( $curl );  // close cURL resource, and free up system resources
+  } else {
+    // cURL is not avail.
+    $opts = [ 'http' => [ 'method' => 'GET' ]];
+    $context = stream_context_create($opts);
+    $data = file_get_contents( $file_url, false, $context );
+    if (false === $data) {
+      $error = 'PHP `file_get_contents` Error: ' + error_get_last();
+    }
+  }
+  return $data;
+}
+
+/**
  * fetches an external file with cURL or ``
  */
-function http_get_remote_file($file_url, $content_type, $filename = false, $cache_for = DEFAULT_CACHE_TIME) {
-  $has_error = false;
+function http_get_and_print_remote_file($file_url, $content_type, $filename = false, $cache_for = DEFAULT_CACHE_TIME) {
+  global $error;
+  $error = false;
 
   header('Content-Type: ' . $content_type, true);
   if (!$filename) {
@@ -324,38 +396,14 @@ function http_get_remote_file($file_url, $content_type, $filename = false, $cach
   }
   http_response_cache_for( $cache_for );
 
-  $curl = @curl_init();  // Initialize cURL
-  if (false !== $curl) {
-    curl_setopt( $curl, CURLOPT_URL, $file_url );
-    curl_setopt( $curl, CURLOPT_FOLLOWLOCATION, true );
-    curl_setopt( $curl, CURLOPT_MAXREDIRS, 10 );
-    curl_setopt( $curl, CURLOPT_HEADER, false );
-    curl_setopt( $curl, CURLOPT_BINARYTRANSFER, true );
-    curl_setopt( $curl, CURLOPT_HTTPGET, true );
-    curl_setopt( $curl, CURLOPT_TIMEOUT, DEFAULT_CURL_TIMEOUT );
-    curl_setopt( $curl, CURLOPT_CONNECTTIMEOUT, DEFAULT_CURL_TIMEOUT );
-
-    if (curl_exec( $curl ) === false) {  // fetch and dump
-      $has_error = 'cURL Error ' . curl_errno($curl) . ': ' . curl_error($curl);
-    }
-    curl_close( $curl );  // close cURL resource, and free up system resources
+  $content = new_file_get_contents($file_url);
+  if (false !== $content) {
+    print( $content );
   } else {
-    // cURL is not avail.
-    $opts = [ 'http' => [ 'method' => 'GET' ]];
-    $context = stream_context_create($opts);
-    $content = file_get_contents( $file_url, false, $context );
-    if (false !== $content) {
-      print( $content );
-    } else {
-      $has_error = 'PHP file_get_contents Error';
-    }
-  }
-
-  if (false !== $has_error) {
     header('Content-Type: text/plain', true);
-    echo $has_error;
+    echo $error;
   }
-  return !$has_error;
+  return !!$content;  // cast as bool
 }
 
 /**
@@ -420,7 +468,10 @@ function sanitize($string) {
 // ---------- End of helpers ---------
 
 
-// ---------- Stuff starts here ----------
+/* ┌────────────────────────────────┐
+ * │  The good stuff starts here!!  │
+ * └────────────────────────────────┘
+ */
 
 // Initialize Globals
 $command = $promise = $content = $short = $url = $expiry = false;
@@ -454,15 +505,12 @@ if (DEBUG) {
 }
 
 processQueryString('e');
-processQueryString('E');
 if (('e' == $command) && !$promise) $promise = 405;
 
-processQueryString('i');
-processQueryString('I');
+processQueryString('f');
 
 processQueryString('u');
-processQueryString('U');
-/* Special case where .htaccess file 'generate's a query string like this `u=i=logo.svg` */
+/* Special case where .htaccess file 'generate's a query string like this `u=f=logo.svg` */
 if ( ('u' == $command) && (strlen($promise) > 2) && isSecondCharAnEqual($promise) )  {
   $command = strtolower( substr($promise, 0, 1) );
   $promise = substr($promise, 2);
@@ -477,22 +525,27 @@ if (!$command) {
   $promise = getCurrentQuery();
 }
 
-// +------------+
-// |  Lets go!  |
-// +------------+
-if (in_array($command, ['u', '@']))  {
+/* ┌────────────┐
+ * │  Lets go!  │
+ * └────────────┘
+ */
+if (in_array($command, ['u', '@', '-']))  {
   // no query situation - if there is a url named `0` then do that, else show hello screen ;)
   if (empty($promise)) $promise = '0';
 
   // Lets go! ... find the url in the datafile
 
   if (false !== $urls) {
-    $special = substr($promise, -1);
     $promise = strtolower($promise);
-    if (in_array($special, ['@', '-'])) {
-      $promise = substr($promise, 0, strlen($promise) - 1);
+    if (in_array($command, ['@', '-'])) {
+      $special = $command;
     } else {
-      $special = false;
+      $special = substr($promise, -1);
+      if (in_array($special, ['@', '-'])) {
+        $promise = substr($promise, 0, strlen($promise) - 1);
+      } else {
+        $special = false;
+      }
     }
 
     $dest = isset($urls[$promise]) ? $urls[$promise] : false;
@@ -559,9 +612,10 @@ if ((false !== $expiry) && ($expiry <= time())) {
   $promise = 418;
 }
 
-// +-------------------------------------------------------------------------+
-// | This is the command processor                                           |
-// +-------------------------------------------------------------------------+
+/* ┌─────────────────────────────────┐
+ * │  This is the command processor  │
+ * └─────────────────────────────────┘
+ */
 
 $title = $config->default_title;
 $inc_fa = false;
@@ -581,14 +635,17 @@ switch ($command) {
     } else {
       $filename = generateQRCodeURL($url, $config->qr_code_engine);
     }
-    $content = '<p class="">Short URL = <code>' . $short . '</code><br>' .
-      'Destination URL = <code>' . $url . '</code><br>' .
-      'Redirecting with code: <code>' . $promise . '</code></p>' .
-      '<p class="text-center"><img src="' . $filename . '" class="img-fluid img-thumbnail img-qrcode"></p>' .
-      '<div class="text-center"><a class="btn btn-lg btn-outline-secondary" href="' . $url . '"' .
-      ' title="' . $url . '"' .
-      ' target="_blank"' .
-      '>' . mb_strimwidth($url, 0, 25, '...') . ' <i class="ml-2 fas fa-up-right-from-square"></i></a></div>';
+    $content = '<p class="">';
+    if (!empty($short)) $content .= 'Short URL = <code>' . $short . '</code><br>';
+    if (!empty($url)) $content .= 'Destination URL = <code>' . $url . '</code><br>';
+    if (!empty($promise)) $content .= 'Redirecting with code: <code>' . $promise . '</code>';
+    $content .= '</p>';
+
+    if (!empty($url)) $content .= '<p class="text-center"><img src="' . $filename . '" class="img-fluid img-thumbnail img-qrcode"></p>';
+    if (!empty($url)) $content .= '<div class="text-center"><a class="btn btn-lg btn-outline-secondary" href="' . $url . '"' .
+                ' title="' . $url . '"' .
+                ' target="_blank"' .
+                '>' . mb_strimwidth($url, 0, 25, '...') . ' <i class="ml-2 fas fa-up-right-from-square"></i></a></div>';
 
     break;
 
@@ -602,7 +659,7 @@ switch ($command) {
 
     if (isset($config->qr_content_type)) {
       $filename = isset($config->qr_file_ext) ? sanitize($short) . $config->qr_file_ext : false;
-      http_get_remote_file($url, $config->qr_content_type, $filename);
+      http_get_and_print_remote_file($url, $config->qr_content_type, $filename);
     } else {
       http_response_redirection($url, 307, 0);  // always 307, always no-cache
     }
@@ -618,7 +675,7 @@ switch ($command) {
 
       echo '<?xml version="1.0" encoding="UTF-8"?>' . PHP_EOL;
       echo '<!-- This should never get called. The robots.txt file prohibits it. -->' . PHP_EOL;
-      // echo '<?xml-stylesheet type="text/xsl" href="sitemap.xsl"' . '?' . '>' . PHP_EOL;
+      echo '<?xml-stylesheet type="text/xsl" href="sitemap.xsl"' . '?' . '>' . PHP_EOL;
       echo '<urlset' .
         ' xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"' .
         // ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"' .
@@ -666,13 +723,37 @@ switch ($command) {
       $fn = 'f_' . $url . '_redirection';
       if (isset($special)) {
         switch ($special) {
-          case '@': $fn .= '_at'; break;
-          case '-': $fn .= '_dash'; break;
-        }
+          case '@':
+            $fn .= '_at';
+            $cnf['qr_code_engine'] = $config->qr_code_engine;
+            if (isset($config->qr_content_type))
+              $cnf['qr_content_type'] = $config->qr_content_type;
+            if (isset($config->qr_file_ext))
+              $cnf['qr_file_ext'] = $config->qr_file_ext;
+            break;
+          case '-':
+            $fn .= '_dash';
+            break;
+          }
       }
       if (function_exists($fn)) {
-        $fn($promise, $cnf); // call the plugin function, with conf.
-        die(); // !!!
+        $result = $fn($promise, $cnf); // call the plugin function, with conf.
+        if ($result) {
+          die(); // !!! All good, plugin did its thing.
+        } else {
+          $command = 'e';
+          if (!is_numeric($promise)) {
+            $promise = 500;
+          } elseif ($promise < 500 || $promise > 599) {
+            $promise = 510;
+          }
+          if (isset($error) && !!$error) {
+            $content = '<h2 class="text-center"><small class="text-muted">';
+            $content .= '<tt>' . strtoupper($url) . '</tt> Plugin Error: ';
+            $content .= '<i>' . $error . '</i>';
+            $content .= '</small></h2>';
+          }
+        }
       } else {
         $command = 'e';
         $promise = 501;
@@ -685,9 +766,10 @@ switch ($command) {
     break;
 
   case 'e':
-    // -------------------------------------
-    // --- ignore for now, process later ---
-    // -------------------------------------
+    /* ┌─────────────────────────────────┐
+     * │  Ignore for now, process later  │
+     * └─────────────────────────────────┘
+     */
     break;
 
   case 'h':
@@ -696,46 +778,48 @@ switch ($command) {
     $content = '<div class="text-center">My name is <tt><b>' . $_SERVER['SERVER_NAME'] . '</b></tt></div>';
     break;
 
-    case 'i':
-      // --- Include files, inline ---
-      if ( !empty($images) ) {
-        $promise = strtolower($promise);  // lowercase filenames!
-        if (array_key_exists($promise, $images)) {
+  case 'f':
 
-          $ct = isset($images[$promise]['c']) ? $images[$promise]['c'] : 'text/plain';
+    // --- Include files, inline ---
+    if ( !empty($images) ) {
+      $promise = strtolower($promise);  // lowercase filenames!
+      if (array_key_exists($promise, $images)) {
 
-          if (isset($images[$promise]['d']) && !empty(isset($images[$promise]['d']))) {
-            if (isset($images[$promise]['b']) && $images[$promise]['b']) {
-              $content = base64_decode( $images[$promise]['d'] );
-            } else {
-              $content = $images[$promise]['d'];
-            }
+        $ct = isset($images[$promise]['c']) ? $images[$promise]['c'] : 'text/plain';
+
+        if (isset($images[$promise]['d']) && !empty(isset($images[$promise]['d']))) {
+          if (isset($images[$promise]['b']) && $images[$promise]['b']) {
+            $content = base64_decode( $images[$promise]['d'] );
           } else {
-            $content = '';
+            $content = $images[$promise]['d'];
           }
-
-          $hold = isset($images[$promise]['h']) ? intval($images[$promise]['h']) : DEFAULT_CACHE_TIME;
-
-          header('Content-Type: ' . $ct, true);
-          header('Content-Disposition: attachment; filename="' . $promise . '"');
-          http_response_cache_for( $hold );
-          print( $content );
-
-          die(); // !!!
-
         } else {
-          $content = '<p class="h3 text-center">File <code>' . $promise . '</code> not found</p>';
-          $promise = 404;
+          $content = '';
         }
-      }
 
-      $command = 'e';  // if you got here then you're in error
-      break;
+        $hold = isset($images[$promise]['h']) ? intval($images[$promise]['h']) : DEFAULT_CACHE_TIME;
+
+        header('Content-Type: ' . $ct, true);
+        header('Content-Disposition: inline; filename="' . $promise . '"');
+        http_response_cache_for( $hold );
+        print( $content );
+
+        die(); // !!!
+
+      } else {
+        $content = '<p class="h3 text-center">File <code>' . $promise . '</code> not found</p>';
+        $promise = 404;
+      }
+    }
+
+    $command = 'e';  // if you got here then you're in error
+    break;
 
   case 'u':
-    // -----------------------
-    // --- URL redirection ---
-    // -----------------------
+    /* ┌───────────────────┐
+     * │  URL redirection  │
+     * └───────────────────┘
+     */
 
     $promise = validateRedirectionHtmlResponseCode($promise);  // Just to make sure :)
     if ((302 == $promise) || (307 == $promise)) {
@@ -787,9 +871,10 @@ switch ($command) {
     break;
 
   default:
-    // ------------
-    // --- WTF? ---
-    // ------------
+    /* ┌───────────────────────────────┐
+     * │  WTF?  You shoudn't be here!  │
+     * └───────────────────────────────┘
+     */
     $color = 'secondary';
     $heading = '<b>WTF</b> <i class="fas fa-question"></i>';
     $inc_fa = true;
@@ -873,11 +958,9 @@ if ('e' == $command) { // Error page, common
   }
 }
 
-/* |-------------------------------------------------------------------------|
- * |                                                                         |
- * |     HTML Goodness starts here                                           |
- * |                                                                         |
- * |-------------------------------------------------------------------------|
+/* ┌─────────────────────────────┐
+ * │  HTML Goodness starts here  │
+ * └─────────────────────────────┘
  */
 
 ?><!doctype html>
@@ -892,9 +975,9 @@ if ('e' == $command) { // Error page, common
 <?php if ($inc_highlighter) { ?>
   <link rel="stylesheet" href="<?= $config->highlight_css['url'] ?>" integrity="<?= $config->highlight_css['hash'] ?>" crossorigin="anonymous">
 <?php } ?>
-  <link rel="apple-touch-icon" href="<?= add_trailing_slash(getCurrentUrl()) . '?i=favicon.png' ?>">
-  <link rel="icon" type="image/png" href="<?= add_trailing_slash(getCurrentUrl()) . '?i=favicon.png' ?>">
-  <link rel="icon" type="image/svg+xml" href="<?= add_trailing_slash(getCurrentUrl()) . '?i=icon.svg' ?>" sizes="any">
+  <link rel="apple-touch-icon" href="<?= add_trailing_slash(getCurrentUrl()) . '?f=favicon.png' ?>">
+  <link rel="icon" type="image/png" href="<?= add_trailing_slash(getCurrentUrl()) . '?f=favicon.png' ?>">
+  <link rel="icon" type="image/svg+xml" href="<?= add_trailing_slash(getCurrentUrl()) . '?f=icon.svg' ?>" sizes="any">
   <title><?= $title ?></title>
   <style>
     .wrapper { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
@@ -910,7 +993,7 @@ if ('e' == $command) { // Error page, common
   <div class="wrapper">
 
     <div class="dialog card border rounded-lg shadow-lg text-center border-<?= $color ?>">
-      <h5 class="card-header bg-light px-5 py-3 border-<?= $color ?>"><img src="<?= add_trailing_slash(getCurrentUrl()) . '?i=logo.svg' ?>" class="logo"></h5>
+      <h5 class="card-header bg-light px-5 py-3 border-<?= $color ?>"><img src="<?= add_trailing_slash(getCurrentUrl()) . '?f=logo.svg' ?>" class="logo"></h5>
       <div class="card-body text-left">
         <h1 class="card-title text-center"><?= $heading ?></h1>
         <?= $content ?>

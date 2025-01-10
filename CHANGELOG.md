@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [Unreleased]
+
+### Added
+
+- GeoIP URLs > define URLs on a per contry basis.  Think Amazon affiliate links.
+
+### Changed
+
+- Minor tweaks in command character case processing
+- Changed "`i`" command to "`f`" command.
+- Moved cURL based `file_get_contents` to its own function
+- Rename `http_get_and_print_remote_file` function
+- Pass QR Code config items to plugins when "`@`" command used
+
+### Fixed
+
+- Logical error when "`@`" and "`-`" are called directly, e.g. `?@=x`
+
+
 ## [v2.0.0] - 2024-05-19
 
 ### Changed
@@ -19,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Plugins**! You can now extend the code with optional plugins, included in this rel. is:
     - vCard support
 - New command - "`*`" - to generate a **`sitemap.xml`** file.
-- Function - `http_get_remote_file()` - to fetch files remotely.
+- Function - `http_get_and_print_remote_file()` - to fetch files remotely.
 - Function - `liquefyStr()` - to replace `{{markers}}` in strings
 - Custom inline CSS to center dialog.
 - `.htaccess` rule to generate `sitemap.xml`.

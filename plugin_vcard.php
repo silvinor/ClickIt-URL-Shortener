@@ -1,22 +1,20 @@
 <?php
-/* +-------------------------------------------------------------------------+
- * |  ClickIt-URL-Shortener Plugin to generate RFC6350 compliant VCARDs      |
- * |  @see: https://www.rfc-editor.org/rfc/rfc6350 (technical)               |
- * |  @see: https://en.wikipedia.org/wiki/vcard    (simple)                  |
- * |                                                                         |
- * |  Content-Type: text/vcard   (or is it text/v-card, or text/x-vcard ?)   |
- * |  File extension: .vcf or .vcard                                         |
- * |                                                                         |
- * |  NB!:  All functions must start with `f_vcard_` to prevent conflicts    |
- * |        with other plugins.                                              |
- * +-------------------------------------------------------------------------+
- */
-/* +=========================================================================+
- * |                                                                         |
- * |  THIS IS FAR FROM A COMPLETE IMPLEMENTATION!  IT'S JUST ENOUGH FOR MY   |
- * |  USE.  IF YOU WANT TO HELP, PLEASE DO WITH A PR TO THE REPO.            |
- * |                                                                         |
- * +=========================================================================+
+/* ╔═════════════════════════════════════════════════════════════════════════╗
+ * ║  ClickIt-URL-Shortener Plugin to generate RFC6350 compliant VCARDs      ║
+ * ║  @see: https://www.rfc-editor.org/rfc/rfc6350 (technical)               ║
+ * ║  @see: https://en.wikipedia.org/wiki/vcard    (simple)                  ║
+ * ║                                                                         ║
+ * ║  Content-Type: text/vcard   (or is it text/v-card, or text/x-vcard ?)   ║
+ * ║  File extension: .vcf or .vcard                                         ║
+ * ║                                                                         ║
+ * ║  NB!:  All functions must start with `f_vcard_` to prevent conflicts    ║
+ * ║        with other plugins.                                              ║
+ * ╟─────────────────────────────────────────────────────────────────────────╢
+ * ║                                                                         ║
+ * ║  THIS IS FAR FROM A COMPLETE IMPLEMENTATION!  IT'S JUST ENOUGH FOR MY   ║
+ * ║  USE.  IF YOU WANT TO HELP, PLEASE DO WITH A PR TO THE REPO.            ║
+ * ║                                                                         ║
+ * ╚═════════════════════════════════════════════════════════════════════════╝
  */
 
 const DEBUG_VC = false;
@@ -169,16 +167,16 @@ function f_vcard_redirection($data, $config = false) {
 function f_vcard_redirection_at($data, $config = false) {
   if (!$config || !isset($config['qr_code_engine']) || !isset($config['qr_content_type']) || !isset($config['qr_file_ext'])) {
     f_vcard_redirection($data, $config);
-    print('ERROR:Cannot generate QR-Code' . PHP_CRLF);
+    print('ERROR: Cannot generate QR-Code' . PHP_CRLF);
     return true;
   }
 
-  if (function_exists('http_get_remote_file')) {
+  if (function_exists('http_get_and_print_remote_file')) {
     $data = f_vcard_sanitizeData($data);
     $vcard = f_vcard_generateVCard($data);
     $filename = f_vcard_normalizeFileName( $data['name']['first'] . ' ' . $data['name']['last'] . $config['qr_file_ext'] );
     $remote_url = f_vcard_generateQRCodeURL($vcard, $config['qr_code_engine']);
-    return http_get_remote_file($remote_url, $config['qr_content_type'], $filename);
+    return http_get_and_print_remote_file($remote_url, $config['qr_content_type'], $filename);
   } else {
     return f_vcard_redirection($data, $config);
   }
