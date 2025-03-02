@@ -884,7 +884,8 @@ switch ($command) {
     $content .= var_dump_ret($promise, '$promise');
     $content .= var_dump_ret($url, '$url');
     $content .= var_dump_ret($short, '$short');
-    http_response_code(500);  header('X-Server-Error: WTF?', true, 500);
+    header('X-Server-Error: WTF?', true, 500);
+    http_response_code(500);
     http_response_cache_now();
 }
 

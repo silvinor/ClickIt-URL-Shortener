@@ -15,14 +15,6 @@
  * ╚═════════════════════════════════════════════════════════════════════════╝
  */
 
-/*
-@See:
-
-Test IPs:
-- 119.18.1.195
-- 2403:5808:4c1e:0:3c6d:364c:8bcf:4f07
-*/
-
 const GEOIP_REDIRECTION_CODE = 307;
 const GEOIP_SERVICE_URL = 'service_url';
 const GEOIP_DATA_TYPE = 'data_type';
@@ -39,7 +31,6 @@ if (!isset($f_geoip_defaults))
     GEOIP_DATA_TYPE => 'serialize',
     GEOIP_DATA_KEY => 'geoplugin_countryCode'
   ];
-
 
 if (!function_exists('array_key_merge')) {
   function array_key_merge(array $src, array $fill): array {
@@ -66,7 +57,6 @@ function f_geoip_init() {
   if (!$f_geoip_user_ip) {
     @$f_geoip_user_ip = $_SERVER['REMOTE_ADDR'];
   }
-  $f_geoip_user_ip = '119.18.1.195';  // TODO : REMOVE ONCE DEBUGGED
 
   $f_geoip_init = true;
 }
@@ -94,7 +84,11 @@ function f_geoip_redirection($data, $config = false) {
 
   $data = array_change_key_case($data, CASE_LOWER);
   ksort($data);
-  $config = array_key_merge($config, $f_geoip_defaults);
+  if (false !== $config) {
+    $config = array_key_merge($config, $f_geoip_defaults);
+  } else {
+    $config = $f_geoip_defaults;
+  }
 
   $service_url = str_replace('{{ip}}', urlencode($f_geoip_user_ip), $config[GEOIP_SERVICE_URL]);
 
