@@ -58,4 +58,4 @@ Please reach me via a PR to the core repo.
 
 I hope you enjoy learning, or even using, this source.
 
-> Made with &#x2665; by [Silvino Rodrigues](https://github.com/silvinor)
+> Made with &#x2665; by [Silvino R.](https://github.com/silvinor)

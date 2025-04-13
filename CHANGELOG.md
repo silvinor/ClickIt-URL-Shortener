@@ -141,7 +141,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 -----
-> Made with &#x2665; by [Silvino Rodrigues](https://github.com/silvinor)
+> Made with &#x2665; by [Silvino R.](https://github.com/silvinor)
 
 
 [v2.0.0]: https://github.com/silvinor/ClickIt-URL-Shortener/compare/v2.0.0-beta-2...v2.0.0

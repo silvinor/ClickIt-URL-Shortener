@@ -2,13 +2,13 @@
 
 /**
  * @package    c1k.it
- * @author     Silvino Rodrigues (@silvinor)
+ * @author     Silvino R. (@silvinor)
  * @copyright  (c) 2024 - See LICENSE.md for copyright notice and details.
  * @license    MIT
  */
 /* ╔═════════════════════════════════════════════════════════════════════════╗
  * ║                                                                         ║
- * ║  ClickIt-URL-Shortener, © 2024 Silvino Rodrigues                        ║
+ * ║  ClickIt-URL-Shortener, © 2024 Silvino R.                        ║
  * ║                                                                         ║
  * ╚═════════════════════════════════════════════════════════════════════════╝
  */
@@ -70,7 +70,7 @@ $config = [
     'url' => 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js',
     'hash' => 'sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp'
   ],
-  'copyright' => '&copy; 2011-2025 Silvino Rodrigues | <a href="https://github.com/silvinor/clickit-url-shortener"><i class="fa-brands fa-github-alt"></i> ClickIt-URL-Shortener</a>'
+  'copyright' => '&copy; 2011-2025 Silvino R. | <a href="https://github.com/silvinor/clickit-url-shortener"><i class="fa-brands fa-github-alt"></i> ClickIt-URL-Shortener</a>'
 ];
 
 /* --------- Static content --------- */
@@ -478,7 +478,8 @@ $command = $promise = $content = $short = $url = $expiry = false;
 $config = (object) $config;
 if (!isset($urls)) $urls = false;
 
-header('X-Powered-By: ClickIt-URL-Shortener, by Silvino Rodrigues (@silvinor)', true);
+header('X-Powered-By: ClickIt-URL-Shortener, by Silvino R. (@silvinor)', true);
+header('X-DNS-Prefetch-Control: off');
 
 /*
  * Note: Data will always load from in-file '$config->json_data_filename',
