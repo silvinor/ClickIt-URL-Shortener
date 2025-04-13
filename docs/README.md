@@ -68,6 +68,8 @@ You can only use one of the 4 accepted redirection codes, namely:
 
     The URL of the requested resource has been changed permanently. The new URL is given in the response.
 
+    ***NB:*** It is important to realise that most browsers will cache this new URL, so any subsequent requests to that short URL from that browser will not query your host (this service) but rather automatically redirect to the new long URL given before. If you should subsequently change the long URL, then the browser will most likely not see that, since it will not query the short URL until its expiry in the browser's cache.
+
 - **`302`** - **Found**
 
     This response code means that the URI of requested resource has been changed temporarily.
