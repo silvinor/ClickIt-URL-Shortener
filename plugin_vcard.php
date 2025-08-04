@@ -173,9 +173,16 @@ function f_vcard_redirection_at($data, $config = false) {
 
   if (function_exists('http_get_and_print_remote_file')) {
     $data = f_vcard_sanitizeData($data);
-    $vcard = f_vcard_generateVCard($data);
+
+    $self = (bool) ($data["self"] ?? false);
+    if ($self) {
+      $remote_url = f_vcard_generateQRCodeURL( $config["self"].$config["short"], $config['qr_code_engine'] );
+    } else {
+      $vcard = f_vcard_generateVCard($data);
+      $remote_url = f_vcard_generateQRCodeURL($vcard, $config['qr_code_engine']);
+    }
     $filename = f_vcard_normalizeFileName( $data['name']['first'] . ' ' . $data['name']['last'] . $config['qr_file_ext'] );
-    $remote_url = f_vcard_generateQRCodeURL($vcard, $config['qr_code_engine']);
+
     return http_get_and_print_remote_file($remote_url, $config['qr_content_type'], $filename);
   } else {
     return f_vcard_redirection($data, $config);
