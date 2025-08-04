@@ -8,7 +8,7 @@
  */
 /* ╔═════════════════════════════════════════════════════════════════════════╗
  * ║                                                                         ║
- * ║  ClickIt-URL-Shortener, © 2024 Silvino R.                        ║
+ * ║  ClickIt-URL-Shortener, © 2024 Silvino R.                               ║
  * ║                                                                         ║
  * ╚═════════════════════════════════════════════════════════════════════════╝
  */
@@ -35,40 +35,40 @@ $config = [
   'json_data_filename' => 'short_urls.json',
   'private' => true,
   // Thanks to https://goqr.me/api/doc/create-qr-code/
-  'qr_code_engine' => 'https://api.qrserver.com/v1/create-qr-code/?format=svg&color=000000&bgcolor=FFFFFF&qzone=2&margin=0&size=300x300&ecc=L&data={{url}}',
+  'qr_code_engine' => 'https://api.qrserver.com/v1/create-qr-code/?format=svg&color=000000&bgcolor=FFFFFF&qzone=2&margin=0&size=300x300&ecc=L&data={{data}}',
   'qr_content_type' => 'image/svg+xml',
   'qr_file_ext' => '.svg',
   'extra_css' => '<style>.img-qrcode{width:300px;height:300px}</style>',
   'default_title' => 'c1k.it',
   // Thanks to https://www.srihash.org/ for the SRI Hash Generator
   'bootstrap_css' => [
-    'url' => 'assets/css/bootstrap-dark.min.css',
-    'hash' => ''
+    'url' => 'https://cdn.jsdelivr.net/gh/silvinor/bootlace@5.3.7/dist/css/bootlace.min.css',
+    'hash' => 'sha384-eot1opfzGFlwUV+MPPLx3Bn3q/s3cWjnH2wWSurFX36RR6y5XbAuJ1d9gbQUiYKG'
   ],
   'fontawesome_css' => [
-    'url' => 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css',
-    'hash' => 'sha384-PPIZEGYM1v8zp5Py7UjFb79S58UeqCL9pYVnVPURKEqvioPROaVAJKKLzvH2rDnI'
+    'url' => 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css',
+    'hash' => 'sha384-tGBVFh2h9Zcme3k9gJLbGqDpD+jRd419j/6N32rharcTZa1X6xgxug6pFMGonjxU'
   ],
   'highlight_css' => [
     'url' => 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css',
     'hash' => 'sha384-4Y0nObtF3CbKnh+lpzmAVdAMtQXl+ganWiiv73RcGVdRdfVIya8Cao1C8ZsVRRDz'
   ],
-  'jquery_js' => [
-    'url' => 'https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.slim.min.js',
-    'hash' => 'sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj'
-  ],
+  // 'jquery_js' => [
+  //   'url' => 'https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.slim.min.js',
+  //   'hash' => 'sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj'
+  // ],
   // Don't think I need popper for this project
   // 'popper_js' => [
-  //   'url' => 'https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js',
-  //   'hash' => 'sha384-9/reFTGAW83EW2RDu2S0VKaIzap3H66lZH81PoYlFhbGU+6BZp6G7niu735Sk7lN'
+  //   'url' => 'https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js',
+  //   'hash' => 'sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r'
   // ],
   'bootstrap_js' => [
-    'url' => 'https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.min.js',
-    'hash' => 'sha384-+sLIOodYLS7CIrQpBjl+C7nPvqq+FbNUBDunl/OZv93DB7Ln/533i8e/mZXLi/P+'
+    'url' => 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.min.js',
+    'hash' => 'sha384-7qAoOXltbVP82dhxHAUje59V5r2YsVfBafyUDxEdApLPmcdhBPg1DKg1ERo0BZlK'
   ],
   'highlight_js' => [
-    'url' => 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js',
-    'hash' => 'sha384-F/bZzf7p3Joyp5psL90p/p89AZJsndkSoGwRpXcZhleCWhd8SnRuoYo4d0yirjJp'
+    'url' => 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js',
+    'hash' => 'sha384-RH2xi4eIQ/gjtbs9fUXM68sLSi99C7ZWBRX1vDrVv6GQXRibxXLbwO2NGZB74MbU'
   ],
   'copyright' => '&copy; 2011-2025 Silvino R. | <a href="https://github.com/silvinor/clickit-url-shortener"><i class="fa-brands fa-github-alt"></i> ClickIt-URL-Shortener</a>'
 ];
@@ -161,24 +161,24 @@ if (DEBUG) {
   function var_dump_ret($mixed, $name = false, $echo = false) {
     ob_start();
     var_dump($mixed);
-
-    $ret = !$name ? '' : '<b>' . $name . '</b> = ';
-    $ret .= '<code>'. htmlspecialchars(ob_get_contents(), ENT_QUOTES) . '</code><br>';
+    $ret = htmlspecialchars(ob_get_contents(), ENT_QUOTES);
     ob_end_clean();
+
+    $ret = (!$name ? '' : '<b>' . $name . '</b> = ') . '<code>' . $ret . '</code><br>';
     if (!$echo) return $ret;
 
     echo str_replace(['&quot;', '&gt;', '&lt;'], ['"', '>', '<'], strip_tags( $ret ));
   }
 
-  function dump_globals() {
+  function dump_globals($echo = true) {
     global $config, $command, $promise, $content, $short, $url, $error;
-    print( var_dump_ret($command, '$command') );
-    print( var_dump_ret($promise, '$promise') );
-    print( var_dump_ret($content, '$content') );
-    print( var_dump_ret($short, '$short') );
-    print( var_dump_ret($url, '$url') );
-    print( var_dump_ret($error, '$error') );
-    print( var_dump_ret($config, '$config') );
+    var_dump_ret($command, '$command', $echo);
+    var_dump_ret($promise, '$promise', $echo);
+    var_dump_ret($content, '$content', $echo);
+    var_dump_ret($short, '$short', $echo);
+    var_dump_ret($url, '$url', $echo);
+    var_dump_ret($error, '$error', $echo);
+    var_dump_ret($config, '$config', $echo);
   }
 }
 
@@ -481,23 +481,27 @@ if (!isset($urls)) $urls = false;
 header('X-Powered-By: ClickIt-URL-Shortener, by Silvino R. (@silvinor)', true);
 header('X-DNS-Prefetch-Control: off');
 
+processQueryString('f');
+
 /*
  * Note: Data will always load from in-file '$config->json_data_filename',
  * but once loaded the content of the json may override the $config object.
  */
-if ((false === $urls) && file_exists($config->json_data_filename)) {
-  $json_data = json_decode_helper( @file_get_contents($config->json_data_filename) );
-  if ((null == $json_data) || (JSON_ERROR_NONE !== json_last_error()) ) {
-    $command = 'e';
-    $content = '<p>JSON error <b>' . json_last_error_text() . '</b> in file <code>' . $config->json_data_filename . '</code></p>';
-    $promise = 500;
+if ($command === false) {
+  if ((false === $urls) && file_exists($config->json_data_filename)) {
+    $json_data = json_decode_helper( @file_get_contents($config->json_data_filename) );
+    if ((null == $json_data) || (JSON_ERROR_NONE !== json_last_error()) ) {
+      $command = 'e';
+      $content = '<p>JSON error <b>' . json_last_error_text() . '</b> in file <code>' . $config->json_data_filename . '</code></p>';
+      $promise = 500;
+    } else {
+      if (isset($json_data['urls'])) $urls = $json_data['urls'];
+      if (isset($json_data['config'])) $config = (object) array_merge( (array) $config, $json_data['config'] );
+    }
   } else {
-    if (isset($json_data['urls'])) $urls = $json_data['urls'];
-    if (isset($json_data['config'])) $config = (object) array_merge( (array) $config, $json_data['config'] );
+    // JSON file not there, ask for it; a.k.a. needs install
+    $command = 'x';
   }
-} else {
-  // JSON file not there, ask for it; a.k.a. needs install
-  $command = 'x';
 }
 
 if (DEBUG) {
@@ -507,8 +511,6 @@ if (DEBUG) {
 
 processQueryString('e');
 if (('e' == $command) && !$promise) $promise = 405;
-
-processQueryString('f');
 
 processQueryString('u');
 /* Special case where .htaccess file 'generate's a query string like this `u=f=logo.svg` */
@@ -714,12 +716,11 @@ switch ($command) {
       if (isset($config->$cnf)) {
         $cnf = json_decode(json_encode($config->$cnf), true);  // nasty, but can go deep
       } else {
-        $cnf = false;
+        $cnf = array();
       }
-      if (false !== $cnf) {
-        $cnf['short'] = $short;
-        $cnf['self'] = add_trailing_slash(getCurrentUrl());
-      }
+
+      $cnf['short'] = $short;
+      $cnf['self'] = add_trailing_slash(getCurrentUrl());
 
       $fn = 'f_' . $url . '_redirection';
       if (isset($special)) {
@@ -985,8 +986,6 @@ if ('e' == $command) { // Error page, common
     .wrapper { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
     .dialog { display: flex; z-index: 100; max-width: 100%; }
     .logo { max-height: 64px; max-width: 100%; }
-    .card { border-radius: 1em !important; }
-    .card-header { border-top-left-radius: 1em !important; border-top-right-radius: 1em !important; }
     .card-body p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   </style>
 <?php if (isset($config->extra_css) && !empty($config->extra_css)) { echo $config->extra_css . PHP_EOL; } ?>
@@ -994,8 +993,8 @@ if ('e' == $command) { // Error page, common
 <body>
   <div class="wrapper">
 
-    <div class="dialog card border rounded-lg shadow-lg text-center border-<?= $color ?>">
-      <h5 class="card-header bg-light px-5 py-3 border-<?= $color ?>"><img src="<?= add_trailing_slash(getCurrentUrl()) . '?f=logo.svg' ?>" class="logo"></h5>
+    <div class="dialog card border shadow-lg text-center border-<?= $color ?> rounded-4">
+      <h5 class="card-header bg-<?= $color ?> px-5 py-3 border-<?= $color ?> rounded-top-4 bg-opacity-50"><img src="<?= add_trailing_slash(getCurrentUrl()) . '?f=logo.svg' ?>" class="logo"></h5>
       <div class="card-body text-left">
         <h1 class="card-title text-center"><?= $heading ?></h1>
         <?= $content ?>
