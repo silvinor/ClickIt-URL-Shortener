@@ -3,9 +3,14 @@ IndexIgnore *
 Options All -Indexes
 
 <files "short_urls.json">
-  Order Allow,Deny
+  Order allow,deny
   Deny from all
 </files>
+
+<Files "sitemap.xml">
+  Order allow,deny
+  Deny from all
+</Files>
 
 <ifmodule mod_rewrite.c>
   Options +FollowSymLinks

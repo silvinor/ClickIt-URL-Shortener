@@ -16,7 +16,7 @@
 const DEFAULT_REDIRECTION_CODE = 307;
 const DEFAULT_CACHE_TIME = (24 * 60 * 60);  // 1 day, in seconds
 const DEFAULT_CURL_TIMEOUT = 15;  // in seconds
-const DEBUG = false;
+const DEBUG = false;  // TODO : Get this value from the environment
 
 global $config, $command, $promise, $content, $short, $url, $error;
 
@@ -53,10 +53,6 @@ $config = [
     'url' => 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css',
     'hash' => 'sha384-4Y0nObtF3CbKnh+lpzmAVdAMtQXl+ganWiiv73RcGVdRdfVIya8Cao1C8ZsVRRDz'
   ],
-  // 'jquery_js' => [
-  //   'url' => 'https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.slim.min.js',
-  //   'hash' => 'sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj'
-  // ],
   // Don't think I need popper for this project
   // 'popper_js' => [
   //   'url' => 'https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js',
@@ -130,18 +126,18 @@ function validateRedirectionHtmlResponseCode($code) {
  * These are:
  * - `-` - show info page
  * - `@` - show QR-code
- * - `*` - show sitemap.xml, disabled if priavte
+ * - `*` - show sitemap.xml, disabled if private
  * - `+` - pass data to a plugin
- * - `#` - expired short
+ * - `#` - alias to another short
  * - `e` - show error page
  * - `h` - "hello" or "home" page
  * - `f` - "file" fetch internal file, e.g. logo.png
  * - `u` - redirect URL
  * - `x` - settings missing, show "needs install" page
  */
-function validateShortURLisNotCommand($s_url) {
-  return !in_array($s_url, ['-', '@', '*', '+', 'e', 'h', 'f', 'u', 'x']);
-}
+// function validateShortURLisNotCommand($s_url) {
+//   return !in_array($s_url, ['-', '@', '*', '+', 'e', 'h', 'f', 'u', 'x']);
+// }
 
 /**
  * Check if the second character of a string is an "=" character.
@@ -465,7 +461,7 @@ function sanitize($string) {
   return preg_replace('/[^a-z0-9_]/', '', strtolower($string));
 }
 
-// ---------- End of helpers ---------
+/* ---------- End of helpers --------- */
 
 
 /* ┌────────────────────────────────┐
@@ -481,7 +477,7 @@ if (!isset($urls)) $urls = false;
 header('X-Powered-By: ClickIt-URL-Shortener, by Silvino R. (@silvinor)', true);
 header('X-DNS-Prefetch-Control: off');
 
-processQueryString('f');
+processQueryString('f');  // Internal files, e.g. logo
 
 /*
  * Note: Data will always load from in-file '$config->json_data_filename',
@@ -509,10 +505,10 @@ if (DEBUG) {
   if (isset($config->base_url)) unset($config->base_url);
 }
 
-processQueryString('e');
+processQueryString('e');  // Errors
 if (('e' == $command) && !$promise) $promise = 405;
 
-processQueryString('u');
+processQueryString('u');  // URL
 /* Special case where .htaccess file 'generate's a query string like this `u=f=logo.svg` */
 if ( ('u' == $command) && (strlen($promise) > 2) && isSecondCharAnEqual($promise) )  {
   $command = strtolower( substr($promise, 0, 1) );
@@ -526,6 +522,13 @@ if (!$command) {
   // Command not set yet, so assume it's a redirection URL
   $command = 'u';
   $promise = getCurrentQuery();
+}
+
+// ----- Special cases -----
+if ($command == 'u') {
+  if (($promise == '*') || ($promise == '@') || ($promise == '-')) {
+    $command = $promise;
+    $promise = false;
 }
 
 /* ┌────────────┐
@@ -552,6 +555,12 @@ if (in_array($command, ['u', '@', '-']))  {
     }
 
     $dest = isset($urls[$promise]) ? $urls[$promise] : false;
+
+    // process Aliases ... they start with '#'
+    while (($dest !== false) && (strpos($dest, '#') === 0)) {
+      $promise = substr($dest, 1);
+      $dest = isset($urls[$promise]) ? $urls[$promise] : false;
+    }
 
     if (false !== $dest) {
       $short = $promise;  // keep this for info and QR-code gen
@@ -671,14 +680,15 @@ switch ($command) {
 
   case '*':
     // --- SiteMap.XML ---
+
     if (!$config->private) {
 
       header('Content-Type: text/xml', true);
       header('Content-Disposition: inline; filename="sitemap.xml"');
 
       echo '<?xml version="1.0" encoding="UTF-8"?>' . PHP_EOL;
-      echo '<!-- This should never get called. The robots.txt file prohibits it. -->' . PHP_EOL;
-      echo '<?xml-stylesheet type="text/xsl" href="sitemap.xsl"' . '?' . '>' . PHP_EOL;
+      // echo '<!-- This should never get called. The robots.txt file prohibits it. -->' . PHP_EOL;
+      // echo '<?xml-stylesheet type="text/xsl" href="sitemap.xsl"' . '?' . '>' . PHP_EOL;
       echo '<urlset' .
         ' xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"' .
         // ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"' .
@@ -781,7 +791,6 @@ switch ($command) {
     break;
 
   case 'f':
-
     // --- Include files, inline ---
     if ( !empty($images) ) {
       $promise = strtolower($promise);  // lowercase filenames!
@@ -994,7 +1003,7 @@ if ('e' == $command) { // Error page, common
   <div class="wrapper">
 
     <div class="dialog card border shadow-lg text-center border-<?= $color ?> rounded-4">
-      <h5 class="card-header bg-<?= $color ?> px-5 py-3 border-<?= $color ?> rounded-top-4 bg-opacity-50"><img src="<?= add_trailing_slash(getCurrentUrl()) . '?f=logo.svg' ?>" class="logo"></h5>
+      <h5 class="card-header bg-<?= $color ?> px-5 py-3 border-<?= $color ?> rounded-top-4 bg-opacity-25"><img src="<?= add_trailing_slash(getCurrentUrl()) . '?f=logo.svg' ?>" class="logo"></h5>
       <div class="card-body text-left">
         <h1 class="card-title text-center"><?= $heading ?></h1>
         <?= $content ?>
@@ -1011,8 +1020,7 @@ if ('e' == $command) { // Error page, common
 
   </div>
 <?php if ($inc_js) { ?>
-  <script src="<?= $config->jquery_js['url'] ?>" integrity="<?= $config->jquery_js['hash'] ?>" crossorigin="anonymous"></script>
-<?php /* <script src="<?= $config->popper_js['url'] ?>" integrity="<?= $config->popper_js['hash'] ?>" crossorigin="anonymous"></script> */ ?>
+  <?php /* <script src="<?= $config->popper_js['url'] ?>" integrity="<?= $config->popper_js['hash'] ?>" crossorigin="anonymous"></script> */ ?>
   <script src="<?= $config->bootstrap_js['url'] ?>" integrity="<?= $config->bootstrap_js['hash'] ?>" crossorigin="anonymous"></script>
 <?php } ?>
 <?php if ($inc_highlighter) { ?>
