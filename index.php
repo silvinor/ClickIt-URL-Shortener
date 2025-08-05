@@ -1,5 +1,4 @@
 <?php
-
 /**
  * @package    c1k.it
  * @author     Silvino R. (@silvinor)
@@ -16,7 +15,13 @@
 const DEFAULT_REDIRECTION_CODE = 307;
 const DEFAULT_CACHE_TIME = (24 * 60 * 60);  // 1 day, in seconds
 const DEFAULT_CURL_TIMEOUT = 15;  // in seconds
-const DEBUG = false;  // TODO : Get this value from the environment
+define('DEBUG', (getenv('APP_ENV') === 'development' || ini_get('display_errors')));
+
+if (DEBUG) {
+  ini_set('display_errors', 1);
+  ini_set('display_startup_errors', 1);
+  error_reporting(E_ALL);
+}
 
 global $config, $command, $promise, $content, $short, $url, $error;
 
@@ -25,11 +30,13 @@ global $config, $command, $promise, $content, $short, $url, $error;
  * To do that, just uncomment the line below and populate the array with your URLs.
  * Note: This will also disable the loading of the `$config` object, so edit that too.
  */
-/* $urls = [
-  's1' => 'http://{your_url}',
-  's2' => 'http://{your_url}, 302',
-  's3' => [ 'https://{your_url}', 302 ]
-]; /* */
+/*
+    $urls = [
+      's1' => 'http://{your_url}',
+      's2' => 'http://{your_url}, 302',
+      's3' => [ 'https://{your_url}', 302 ]
+    ];
+*/
 
 $config = [
   'json_data_filename' => 'short_urls.json',
@@ -529,6 +536,7 @@ if ($command == 'u') {
   if (($promise == '*') || ($promise == '@') || ($promise == '-')) {
     $command = $promise;
     $promise = false;
+  }
 }
 
 /* ┌────────────┐
