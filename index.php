@@ -565,7 +565,12 @@ if (in_array($command, ['u', '@', '-']))  {
     $dest = isset($urls[$promise]) ? $urls[$promise] : false;
 
     // process Aliases ... they start with '#'
-    while (($dest !== false) && (strpos($dest, '#') === 0)) {
+
+    function __is_hash($s) {
+      return is_string($s) && strlen($s) > 0 && $s[0] === '#';
+    }
+
+    while ( __is_hash($dest) ) {
       $promise = substr($dest, 1);
       $dest = isset($urls[$promise]) ? $urls[$promise] : false;
     }
