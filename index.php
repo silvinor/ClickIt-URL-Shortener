@@ -468,6 +468,73 @@ function sanitize($string) {
   return preg_replace('/[^a-z0-9_]/', '', strtolower($string));
 }
 
+/**
+ * Optional: Send data to a Matomo server for tracking
+ *
+ * Needs the following in your config section of the short_urls.json file:
+ * "config": {
+ *   "matomo": {
+ *     "id": 1, // Replace with your site ID in Matomo
+ *     "url": "https://your.matomo.url", // Replace with your Matomo URL, excluting the php file name
+ *     "timeout": 5 // Timeout in secs for CuRL call
+ *   }
+ * }
+ */
+function recordToMatomo() {
+  global $config, $command, $short;
+
+  if (!property_exists($config, 'matomo') || !isset($config->matomo)) {
+    return false;
+  }
+
+  $siteId = isset($config->matomo['id']) ? $config->matomo['id'] : false;
+  $matomoUrl = isset($config->matomo['url']) ? $config->matomo['url'] : false;
+  if (!$siteId || !$matomoUrl) {
+    return false;
+  }
+  $matomoUrl = add_trailing_slash($matomoUrl) . 'matomo.php'; // API call
+  $timeOut = isset($config->matomo['timeout']) ? $config->matomo['timeout'] : DEFAULT_CURL_TIMEOUT;
+  $visitorIp = $_SERVER['REMOTE_ADDR']; // Get visitor's IP
+  $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+
+  $params = [
+    'idsite'      => $siteId,
+    'rec'         => 1, // Required to record the visit
+    'apiv'        => 1, // API version
+    'action_name' => ('command=' . $command . ',short=' . $short ),
+    'url'         => (getCurrentUrl() . $_SERVER['REQUEST_URI']),
+    'rand'        => mt_rand(), // Random number to prevent caching
+    'cip'         => $visitorIp,
+    'urlref'      => ($_SERVER['HTTP_REFERER'] ?? ''),
+    'h'           => date('H'),
+    'm'           => date('i'),
+    's'           => date('s'),
+    'lang'        => ($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? ''),
+    'ua'          => $userAgent,
+    'uid'         => substr(md5($visitorIp . time()), 0, 16), // Unique Visitor ID
+  ];
+
+  $curl = curl_init();
+  curl_setopt( $curl, CURLOPT_URL, $matomoUrl . '?' . http_build_query($params));
+  curl_setopt( $curl, CURLOPT_USERAGENT, $userAgent);
+  curl_setopt( $curl, CURLOPT_RETURNTRANSFER, true); // Return the response as a string
+  curl_setopt( $curl, CURLOPT_FOLLOWLOCATION, true ); // Follow redirects (if any)
+  curl_setopt( $curl, CURLOPT_MAXREDIRS, 3 );
+  curl_setopt( $curl, CURLOPT_HEADER, false );
+  curl_setopt( $curl, CURLOPT_BINARYTRANSFER, true );
+  curl_setopt( $curl, CURLOPT_HTTPGET, true );
+  curl_setopt( $curl, CURLOPT_TIMEOUT, $timeOut ); // Set a timeout in seconds
+  curl_setopt( $curl, CURLOPT_CONNECTTIMEOUT, $timeOut );
+
+  $data = curl_exec( $curl );
+  if (false === $data) {  // fetch and dump
+    $data = 'cURL Error ' . curl_errno($curl) . ': ' . curl_error($curl);
+  }
+  curl_close( $curl );  // close cURL resource, and free up system resources
+  return $data;
+}
+
+
 /* ---------- End of helpers --------- */
 
 
@@ -647,6 +714,10 @@ $inc_fa = false;
 $inc_js = false;
 $inc_highlighter = false;
 $color = 'default';
+
+if (property_exists($config, 'matomo') && isset($config->matomo)) {
+  recordToMatomo();
+}
 
 switch ($command) {
 
