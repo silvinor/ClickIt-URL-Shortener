@@ -469,6 +469,29 @@ function sanitize($string) {
 }
 
 /**
+ * Get / Generate a Unique Client ID
+ */
+function getUserID($visitorIp = flase) {
+  global $uid, $dnt;
+
+  if ($visitorIp === false) $visitorIp = $_SERVER['REMOTE_ADDR'];
+
+  if (!isset($uid)) {
+    $uid = (isset($_COOKIE['uid']) ? $_COOKIE['uid'] : false); // get prior uid from cookie
+    if (($uid !== false) && (strlen($uid) != 16)) $uid = false; // invalid
+    if ($uid === false) $uid = substr(md5($visitorIp . time()), 0, 16); // Unique Visitor ID
+  }
+  if (!isset($dnt)) {
+    $dnt = (isset($_SERVER['HTTP_DNT']) && $_SERVER['HTTP_DNT'] === '1') ? true : false;
+    $dnt = !$dnt ? false : (isset($_COOKIE['dnt']) && ($_COOKIE['dnt'] === '1' || $_COOKIE['dnt'] === true));
+  }
+
+  if (!$dnt) setcookie('uid', $uid, strtotime('+1 year')); // Remember
+
+  return $uid;
+}
+
+/**
  * Optional: Send data to a Matomo server for tracking
  *
  * Needs the following in your config section of the short_urls.json file:
@@ -481,7 +504,7 @@ function sanitize($string) {
  * }
  */
 function recordToMatomo() {
-  global $config, $command, $short;
+  global $uid, $dnt, $config, $command, $short;
 
   if (!property_exists($config, 'matomo') || !isset($config->matomo)) {
     return false;
@@ -495,6 +518,8 @@ function recordToMatomo() {
   $matomoUrl = add_trailing_slash($matomoUrl) . 'matomo.php'; // API call
   $timeOut = isset($config->matomo['timeout']) ? $config->matomo['timeout'] : DEFAULT_CURL_TIMEOUT;
   $visitorIp = $_SERVER['REMOTE_ADDR']; // Get visitor's IP
+  $uid = getUserID($visitorIp);
+  if (isset($dnt) && $dnt === true) $visitorIp = false; // do not track
   $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
 
   $params = [
@@ -511,7 +536,7 @@ function recordToMatomo() {
     's'           => date('s'),
     'lang'        => ($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? ''),
     'ua'          => $userAgent,
-    'uid'         => substr(md5($visitorIp . time()), 0, 16), // Unique Visitor ID
+    'uid'         => $uid, // Unique Visitor ID
   ];
 
   $curl = curl_init();
@@ -532,6 +557,39 @@ function recordToMatomo() {
   }
   curl_close( $curl );  // close cURL resource, and free up system resources
   return $data;
+}
+
+/**
+ * Log to file
+ * !! WARNING : Don't use this is a high volume site, log files are not managed
+ */
+function recordToLogFile() {
+  global $logfile, $config, $command, $short;
+
+  if (!property_exists($config, 'log') || !isset($config->log) || ($config->log === false)) {
+    return false;
+  }
+
+  if (!isset($logfile)) {
+    $logfile = $config->log;
+    if ($logfile === true ) { $logfile = 'log_file.log'; }
+    $logfile = add_trailing_slash(__DIR__) . $logfile;
+  }
+
+  $visitorIp = $_SERVER['REMOTE_ADDR']; // Get visitor's IP
+  $message = [
+    'command'     => $command,
+    'short'       => $short,
+    'uid'         => getUserID($visitorIp),
+    // 'url'         => (getCurrentUrl() . $_SERVER['REQUEST_URI']),
+    'ip'          => $visitorIp,
+    'lang'        => ($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? ''),
+    'referer'     => ($_SERVER['HTTP_REFERER'] ?? ''),
+    'ua'          => ($_SERVER['HTTP_USER_AGENT'] ?? '')
+  ];
+  $message = json_encode($message);
+  $dateStamp = '[' . date("c") . ']';
+  file_put_contents($logfile, $dateStamp . ' ' . $message . PHP_EOL, FILE_APPEND);
 }
 
 
@@ -717,6 +775,10 @@ $color = 'default';
 
 if (property_exists($config, 'matomo') && isset($config->matomo)) {
   recordToMatomo();
+}
+
+if (property_exists($config, 'log') && isset($config->log) && ($config->log !== false)) {
+  recordToLogFile();
 }
 
 switch ($command) {
@@ -1112,5 +1174,66 @@ if ('e' == $command) { // Error page, common
   <script>hljs.highlightAll();</script>
 <?php } ?>
 <?php if (isset($config->extra_js) && !empty($config->extra_js)) { echo $config->extra_js . PHP_EOL; } ?>
+
+<?php
+  // Either Matomo tracking or Log File are ON, AND cookie not set, AND the Do Not Track is NOT set
+  // ... then show and handle the DMCA prompt
+  global dnt;
+  if (isset($dnt) && !isset($_COOKIE['dnt']) && (!isset($_SERVER['HTTP_DNT']) || $_SERVER['HTTP_DNT'] !== '1')) {
+?>
+<div id="dmcaPrompt" class="alert alert-info position-fixed bottom-0 start-0 end-0 m-0 rounded-0 d-flex justify-content-between align-items-center">
+  <div>
+    <strong>Cookies:</strong> This site may use cookies for analytics.
+  </div>
+  <div>
+    <button id="acceptBtn" class="btn btn-success btn-sm">Accept</button>
+    <button id="declineBtn" class="btn btn-danger btn-sm">Decline</button>
+  </div>
+</div>
+<script>
+  function setCookie(name, value, days) {
+    const date = new Date();
+    date.setTime(date.getTime() + (days*24*60*60*1000));
+    const expires = "expires=" + date.toUTCString();
+    document.cookie = name + "=" + value + ";" + expires + ";path=/";
+  }
+
+  function getCookie(name) {
+    const cname = name + "=";
+    const decodedCookie = decodeURIComponent(document.cookie);
+    const cookies = decodedCookie.split(';');
+    for (let i = 0; i < cookies.length; i++) {
+      let c = cookies[i].trim();
+      if (c.indexOf(cname) === 0) {
+        return c.substring(cname.length, c.length);
+      }
+    }
+    return false;
+  }
+
+  // DOMContentLoaded ensures it runs after the page is loaded
+  document.addEventListener('DOMContentLoaded', function () {
+    const dnt = getCookie('dnt');
+
+    function hideDcmaPrompt() {
+      const dmcaPrompt = document.getElementById('dmcaPrompt');
+      dmcaPrompt.classList.add('d-none');
+    }
+
+    if (dnt !== false) { hideDcmaPrompt(); }
+
+    document.getElementById('acceptBtn').addEventListener('click', function () {
+      setCookie('dnt', '0', 365);
+      hideDcmaPrompt();
+    });
+    document.getElementById('declineBtn').addEventListener('click', function () {
+      setCookie('dnt', '1', 365);
+      hideDcmaPrompt();
+    });
+  });
+</script>
+<?php
+  }
+?>
 </body>
 </html>
