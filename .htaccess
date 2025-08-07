@@ -3,14 +3,16 @@ IndexIgnore *
 Options All -Indexes
 
 <files "short_urls.json">
-  Order allow,deny
-  Deny from all
+  Require all denied
 </files>
 
 <Files "sitemap.xml">
-  Order allow,deny
-  Deny from all
+  Require all denied
 </Files>
+
+<FilesMatch "\.log$">
+  Require all denied
+</FilesMatch>
 
 <ifmodule mod_rewrite.c>
   Options +FollowSymLinks
@@ -19,9 +21,15 @@ Options All -Indexes
 
   ErrorDocument 400 /index.php?e=400
   ErrorDocument 401 /index.php?e=401
+  ErrorDocument 402 /402.html
   ErrorDocument 403 /index.php?e=403
   ErrorDocument 404 /index.php?e=404
   ErrorDocument 500 /index.php?e=500
+
+  # Block known search engine bots, and A.I. crawlers, by User-Agent
+  RewriteCond %{HTTP_USER_AGENT} (baiduspider|yandex|sogou|mj12bot|ahrefsbot|semrushbot|dotbot|gigabot|spbot|seznambot|bingbot) [NC]
+  RewriteCond %{HTTP_USER_AGENT} (?:gptbot|ccbot|claudebot|anthropicbot|google-extended|bytespider|amazonbot|youbot|phindbot|perplexitybot|kagibot|andi) [NC]
+  RewriteRule ^.* - [R=402,L]
 
   RewriteRule ^sitemap\.xml$ index.php?* [L,PT]
   RewriteRule ^feed/?$ feed.xml [R=303,L]

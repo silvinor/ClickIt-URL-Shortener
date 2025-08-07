@@ -1088,6 +1088,7 @@ if ('e' == $command) { // Error page, common
     switch ($promise) {
       case 400: $content .= 'Bad Request'; break;
       case 401: $content .= 'Unauthorized'; break;
+      case 402: $content .= 'Payment Required'; break;
       case 403: $content .= 'Forbidden'; break;
       case 404:
         if (!$short) {
