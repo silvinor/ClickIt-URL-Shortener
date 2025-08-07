@@ -1178,7 +1178,7 @@ if ('e' == $command) { // Error page, common
 <?php
   // Either Matomo tracking or Log File are ON, AND cookie not set, AND the Do Not Track is NOT set
   // ... then show and handle the DMCA prompt
-  global dnt;
+  global $dnt;
   if (isset($dnt) && !isset($_COOKIE['dnt']) && (!isset($_SERVER['HTTP_DNT']) || $_SERVER['HTTP_DNT'] !== '1')) {
 ?>
 <div id="dmcaPrompt" class="alert alert-info position-fixed bottom-0 start-0 end-0 m-0 rounded-0 d-flex justify-content-between align-items-center">
