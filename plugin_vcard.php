@@ -211,11 +211,15 @@ function f_vcard_redirection_dash($data, $config = false) {
     :root {
       --background: #eee;
       --color: #111;
+      --border: rgba(128,128,128,0.5);
+      --shadow: rgba(0,0,0,0.2) 0px 20px 30px;
     }
     @media (prefers-color-scheme: dark) {
       :root {
         --background: #222;
-        --color: #888;
+        --color: #ddd;
+        --border: rgba(85,85,85,0.5);
+        --shadow: rgba(128,128,128,0.2) 0px 20px 30px;
       }
     }
     body {
@@ -227,7 +231,7 @@ function f_vcard_redirection_dash($data, $config = false) {
       margin: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
       color: var(--color, default);
-      background-color: var(--background, transparent);
+      background-color: var(--background);
     }
     h1 {
       margin: 0;
@@ -237,11 +241,21 @@ function f_vcard_redirection_dash($data, $config = false) {
       max-width: 100%;
       height: auto;
     }
+    .f {
+      display: block;
+      padding: 1rem;
+      border-radius: 2rem;
+      border: 1px solid var(--border);
+      background: #fff !important;
+      box-shadow: var(--shadow);
+    }
   </style>
 </head>
 <body>
   <h1><?= $title ?></h1>
-  <?php if ($url) { ?><a href="<?= $url ?>"><?php } ?><img src="<?= $fnm ?>" alt="<?= $title ?>"><?php if ($url) { ?></a><?php } ?>
+  <div class="f">
+    <?php if ($url) { ?><a href="<?= $url ?>"><?php } ?><img src="<?= $fnm ?>" alt="<?= $title ?>"><?php if ($url) { ?></a><?php } ?>
+  </div>
 </body>
 <?php
   return true;
