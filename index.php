@@ -559,6 +559,19 @@ function recordToMatomo() {
   return $data;
 }
 
+function csv_encode($data) {
+  if (is_object($data)) $data = (array) $data;
+  $flatData = array_filter($data, function ($value) {
+    return !is_array($value) && !is_object($value);
+  });
+  $temp = fopen('php://temp', 'r+');
+  fputcsv($temp, array_values($flatData));
+  rewind($temp);
+  $csv = stream_get_contents($temp);
+  fclose($temp);
+  return $csv;
+}
+
 /**
  * Log to file
  * !! WARNING : Don't use this is a high volume site, log files are not managed
@@ -576,20 +589,20 @@ function recordToLogFile() {
     $logfile = add_trailing_slash(__DIR__) . $logfile;
   }
 
-  $visitorIp = $_SERVER['REMOTE_ADDR']; // Get visitor's IP
+  $visitorIp = $_SERVER['REMOTE_ADDR'] ?? '-'; // Get visitor's IP
   $message = [
+    'd'           => date("c"),
     'command'     => $command,
     'short'       => $short,
+    'uri'         => $_SERVER['REQUEST_URI'],
     'uid'         => getUserID($visitorIp),
-    // 'url'         => (getCurrentUrl() . $_SERVER['REQUEST_URI']),
     'ip'          => $visitorIp,
     'lang'        => ($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? ''),
     'referer'     => ($_SERVER['HTTP_REFERER'] ?? ''),
     'ua'          => ($_SERVER['HTTP_USER_AGENT'] ?? '')
   ];
-  $message = json_encode($message);
-  $dateStamp = '[' . date("c") . ']';
-  file_put_contents($logfile, $dateStamp . ' ' . $message . PHP_EOL, FILE_APPEND);
+  $message = csv_encode($message);
+  error_log($message, 3, $logfile);
 }
 
 
