@@ -27,7 +27,7 @@ Options All -Indexes
   ErrorDocument 500 /index.php?e=500
 
   # Block known search engine bots, and A.I. crawlers, by User-Agent
-  RewriteCond %{HTTP_USER_AGENT} (baiduspider|yandex|sogou|mj12bot|ahrefsbot|semrushbot|dotbot|gigabot|spbot|seznambot|bingbot) [NC]
+  RewriteCond %{HTTP_USER_AGENT} (googlebot|baiduspider|yandex|sogou|mj12bot|ahrefsbot|semrushbot|dotbot|gigabot|spbot|seznambot|bingbot|ugaresearchagent) [NC]
   RewriteCond %{HTTP_USER_AGENT} (?:gptbot|ccbot|claudebot|anthropicbot|google-extended|bytespider|amazonbot|youbot|phindbot|perplexitybot|kagibot|andi) [NC]
   RewriteRule ^.* - [R=402,L]
 

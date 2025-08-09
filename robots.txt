@@ -19,6 +19,8 @@ Disallow: /
 User-agent: phindbot
 Disallow: /
 
+User-agent: googlebot
+Disallow: /
 User-agent: baiduspider
 Disallow: /
 User-agent: yandex
