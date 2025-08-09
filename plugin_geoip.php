@@ -25,6 +25,7 @@ global $f_geoip_defaults;
 
 if (!isset($f_geoip_init)) $f_geoip_init = false;
 
+// TODO : Load these from the `$config` global
 if (!isset($f_geoip_defaults))
   $f_geoip_defaults = [
     GEOIP_SERVICE_URL => 'http://www.geoplugin.net/php.gp?ip={{ip}}',
@@ -105,7 +106,7 @@ function f_geoip_redirection($data, $config = false) {
   }
 
   $response = $fn($response);
-  // TODO : add error checkiung
+  // TODO : add error checking
 
   if (array_key_exists($config[GEOIP_DATA_KEY], $response)) {
     $country_code = strtolower( $response[$config[GEOIP_DATA_KEY]] );
