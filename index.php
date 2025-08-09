@@ -283,6 +283,9 @@ function http_response_cache_for($secs = 0) {
   if (0 == $secs) {
     http_response_cache_now();
     return;
+  } else if (0 > $secs) {
+    http_response_cache_never();
+    return;
   }
 
   $ts = time();
@@ -394,7 +397,7 @@ function http_get_and_print_remote_file($file_url, $content_type, $filename = fa
   $error = false;
 
   header('Content-Type: ' . $content_type, true);
-  if (!$filename) {
+  if (false !== $filename) {
     header('Content-Disposition: inline; filename="' .  $filename . '"');
   }
   http_response_cache_for( $cache_for );
@@ -519,7 +522,6 @@ function recordToMatomo() {
   $timeOut = isset($config->matomo['timeout']) ? $config->matomo['timeout'] : DEFAULT_CURL_TIMEOUT;
   $visitorIp = $_SERVER['REMOTE_ADDR']; // Get visitor's IP
   $uid = getUserID($visitorIp);
-  if (isset($dnt) && $dnt === true) $visitorIp = false; // do not track
   $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
 
   $params = [
@@ -529,7 +531,6 @@ function recordToMatomo() {
     'action_name' => ('command=' . $command . ',short=' . $short ),
     'url'         => (getCurrentUrl() . $_SERVER['REQUEST_URI']),
     'rand'        => mt_rand(), // Random number to prevent caching
-    'cip'         => $visitorIp,
     'urlref'      => ($_SERVER['HTTP_REFERER'] ?? ''),
     'h'           => date('H'),
     'm'           => date('i'),
@@ -538,6 +539,12 @@ function recordToMatomo() {
     'ua'          => $userAgent,
     'uid'         => $uid, // Unique Visitor ID
   ];
+
+  if (!isset($dnt) || $dnt !== true) {
+    $params['cip'] = $visitorIp;
+    $params['cdt'] = date("c");
+    $params['token_auth'] = (isset($config->matomo['token_auth']) ? $config->matomo['token_auth'] : "");
+  }
 
   $curl = curl_init();
   curl_setopt( $curl, CURLOPT_URL, $matomoUrl . '?' . http_build_query($params));
@@ -599,7 +606,8 @@ function recordToLogFile() {
     'ip'          => $visitorIp,
     'lang'        => ($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? ''),
     'referer'     => ($_SERVER['HTTP_REFERER'] ?? ''),
-    'ua'          => ($_SERVER['HTTP_USER_AGENT'] ?? '')
+    'ua'          => ($_SERVER['HTTP_USER_AGENT'] ?? ''),
+    'url'         => getCurrentUrl() // FIXME : Delete - only here as a quick debug for rouge links to the site
   ];
   $message = csv_encode($message);
   error_log($message, 3, $logfile);
@@ -889,7 +897,7 @@ switch ($command) {
       }
 
       $cnf['short'] = $short;
-      $cnf['self'] = add_trailing_slash(getCurrentUrl());
+      $cnf['self'] = strip_trailing_slash(getCurrentUrl());
 
       $fn = 'f_' . $url . '_redirection';
       if (isset($special)) {
@@ -1247,6 +1255,16 @@ if ('e' == $command) { // Error page, common
   });
 </script>
 <?php
+  }
+
+  $analiticsHtml = __DIR__ . '/analitics.html';
+  if (file_exists($analiticsHtml)) {
+    $contents = @file_get_contents($analiticsHtml);
+    if ($contents !== false) {
+      echo $contents;
+    } else {
+      echo "<!-- Unable to read " . $analiticsHtml . " file. -->";
+    }
   }
 ?>
 </body>
