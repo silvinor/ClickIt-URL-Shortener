@@ -3,7 +3,6 @@
  * ║  ClickIt-URL-Shortener Plugin to generate country specific redirects    ║
  * ║  Use it, for example, to create affiliate links to country sensitive    ║
  * ║  website like Amazon etc.                      .                        ║
- * ║  Uses `geoplugin.com`- @see https://www.geoplugin.com/webservices/php   ║
  * ║                                                                         ║
  * ║  NB!:  All functions must start with `f_geoip_` to prevent conflicts    ║
  * ║        with other plugins.                                              ║
@@ -17,6 +16,7 @@
 
 const GEOIP_REDIRECTION_CODE = 307;
 const GEOIP_SERVICE_URL = 'service_url';
+const GEOIP_SERVICE_TOKEN = 'service_token';
 const GEOIP_DATA_TYPE = 'data_type';
 const GEOIP_DATA_KEY = 'data_key';
 
@@ -26,11 +26,12 @@ global $f_geoip_defaults;
 if (!isset($f_geoip_init)) $f_geoip_init = false;
 
 // TODO : Load these from the `$config` global
+
 if (!isset($f_geoip_defaults))
   $f_geoip_defaults = [
-    GEOIP_SERVICE_URL => 'http://www.geoplugin.net/php.gp?ip={{ip}}',
-    GEOIP_DATA_TYPE => 'serialize',
-    GEOIP_DATA_KEY => 'geoplugin_countryCode'
+    GEOIP_SERVICE_URL => 'https://ipinfo.io/{{ip}}/json?token={{token}}',
+    GEOIP_DATA_TYPE => 'json',
+    GEOIP_DATA_KEY => 'country'
   ];
 
 if (!function_exists('array_key_merge')) {
@@ -63,14 +64,20 @@ function f_geoip_init() {
 }
 
 function f_geoip_extract_for_serialize($data) {
-  $data = @unserialize($data);
-  // TODO : Add error checking
+  try {
+    $data = @unserialize($data);
+  } catch(Exception $e) {
+    $data = false;
+  }
   return $data;
 }
 
 function f_geoip_extract_for_json($data) {
-  $data = json_decode($data, true);
-  // TODO : Add error checking
+  try {
+    $data = json_decode($data, true);
+  } catch(Exception $e) {
+    $data = false;
+  }
   return $data;
 }
 
@@ -91,7 +98,9 @@ function f_geoip_redirection($data, $config = false) {
     $config = $f_geoip_defaults;
   }
 
-  $service_url = str_replace('{{ip}}', urlencode($f_geoip_user_ip), $config[GEOIP_SERVICE_URL]);
+  $f_auth_token = isset($config[GEOIP_SERVICE_TOKEN]) ? $config[GEOIP_SERVICE_TOKEN] : '';
+
+  $service_url = str_replace(['{{ip}}', '{{token}}'], [urlencode($f_geoip_user_ip), $f_auth_token], $config[GEOIP_SERVICE_URL]);
 
   if (function_exists('new_file_get_contents')) {
     $response = new_file_get_contents($service_url);
@@ -105,10 +114,13 @@ function f_geoip_redirection($data, $config = false) {
     return false;
   }
 
-  $response = $fn($response);
-  // TODO : add error checking
+  try {
+    $response = $fn($response);
+  } catch (Exception $e) {
+    $response = false;
+  }
 
-  if (array_key_exists($config[GEOIP_DATA_KEY], $response)) {
+  if (!!$response && array_key_exists($config[GEOIP_DATA_KEY], $response)) {
     $country_code = strtolower( $response[$config[GEOIP_DATA_KEY]] );
   } else {
     $country_code = false;
