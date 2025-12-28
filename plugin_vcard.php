@@ -17,6 +17,11 @@
  * ╚═════════════════════════════════════════════════════════════════════════╝
  */
 
+if (!isset($GLOBALS['semaphore'])) {
+  http_response_code(418);
+  exit(1);
+}
+
 const DEBUG_VC = false;
 const PHP_CRLF = "\r\n";  // VCard spec requires CR LF line ends.
 

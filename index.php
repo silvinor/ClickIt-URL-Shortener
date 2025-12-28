@@ -28,7 +28,8 @@ global $config, $command, $promise, $content, $short, $url, $error;
 /*
  * You can skip using an external URLs file by populating your list right here.
  * To do that, just uncomment the line below and populate the array with your URLs.
- * Note: This will also disable the loading of the `$config` object, so edit that too.
+ * Note 1: This will also disable the loading of the `$config` object, so edit that too.
+ * Note 2: API will not work if the file `short_urls.json` is not present.
  */
 /*
     $urls = [
@@ -40,7 +41,6 @@ global $config, $command, $promise, $content, $short, $url, $error;
 
 $config = [
   'json_data_filename' => 'short_urls.json',
-  'private' => true,
   // Thanks to https://goqr.me/api/doc/create-qr-code/
   'qr_code_engine' => 'https://api.qrserver.com/v1/create-qr-code/?format=svg&color=000000&bgcolor=FFFFFF&qzone=2&margin=0&size=300x300&ecc=L&data={{data}}',
   'qr_content_type' => 'image/svg+xml',
@@ -616,532 +616,541 @@ function recordToLogFile() {
 
 /* ---------- End of helpers --------- */
 
-
 /* ┌────────────────────────────────┐
  * │  The good stuff starts here!!  │
  * └────────────────────────────────┘
  */
 
-// Initialize Globals
-$command = $promise = $content = $short = $url = $expiry = false;
-$config = (object) $config;
-if (!isset($urls)) $urls = false;
-
-header('X-Powered-By: ClickIt-URL-Shortener, by Silvino R. (@silvinor)', true);
-header('X-DNS-Prefetch-Control: off');
-
-processQueryString('f');  // Internal files, e.g. logo
-
-/*
- * Note: Data will always load from in-file '$config->json_data_filename',
- * but once loaded the content of the json may override the $config object.
- */
-if ($command === false) {
-  if ((false === $urls) && file_exists($config->json_data_filename)) {
-    $json_data = json_decode_helper( @file_get_contents($config->json_data_filename) );
-    if ((null == $json_data) || (JSON_ERROR_NONE !== json_last_error()) ) {
-      $command = 'e';
-      $content = '<p>JSON error <b>' . json_last_error_text() . '</b> in file <code>' . $config->json_data_filename . '</code></p>';
-      $promise = 500;
-    } else {
-      if (isset($json_data['urls'])) $urls = $json_data['urls'];
-      if (isset($json_data['config'])) $config = (object) array_merge( (array) $config, $json_data['config'] );
-    }
-  } else {
-    // JSON file not there, ask for it; a.k.a. needs install
-    $command = 'x';
-  }
+if (!isset($GLOBALS['semaphore'])) {
+  main();
 }
 
-if (DEBUG) {
-  $config->private = false;
-  if (isset($config->base_url)) unset($config->base_url);
-}
+function main() {
+  global $config, $command, $promise, $content, $short, $url, $error;
 
-processQueryString('e');  // Errors
-if (('e' == $command) && !$promise) $promise = 405;
+  // Initialize Globals
+  $command = $promise = $content = $short = $url = $expiry = false;
+  $config = (object) $config;
+  if (!isset($urls)) $urls = false;
 
-processQueryString('u');  // URL
-/* Special case where .htaccess file 'generate's a query string like this `u=f=logo.svg` */
-if ( ('u' == $command) && (strlen($promise) > 2) && isSecondCharAnEqual($promise) )  {
-  $command = strtolower( substr($promise, 0, 1) );
-  $promise = substr($promise, 2);
-}
+  header('X-Powered-By: ClickIt-URL-Shortener', true);
+  header('X-DNS-Prefetch-Control: off');
 
-processQueryString('@');  // asking for QR-code
-processQueryString('*');  // asking for sitemap.xml
+  processQueryString('f');  // Internal files, e.g. logo
 
-if (!$command) {
-  // Command not set yet, so assume it's a redirection URL
-  $command = 'u';
-  $promise = getCurrentQuery();
-}
-
-// ----- Special cases -----
-if ($command == 'u') {
-  if (($promise == '*') || ($promise == '@') || ($promise == '-')) {
-    $command = $promise;
-    $promise = false;
-  }
-}
-
-/* ┌────────────┐
- * │  Lets go!  │
- * └────────────┘
- */
-if (in_array($command, ['u', '@', '-']))  {
-  // no query situation - if there is a url named `0` then do that, else show hello screen ;)
-  if (empty($promise)) $promise = '0';
-
-  // Lets go! ... find the url in the datafile
-
-  if (false !== $urls) {
-    $promise = strtolower($promise);
-    if (in_array($command, ['@', '-'])) {
-      $special = $command;
-    } else {
-      $special = substr($promise, -1);
-      if (in_array($special, ['@', '-'])) {
-        $promise = substr($promise, 0, strlen($promise) - 1);
-      } else {
-        $special = false;
-      }
-    }
-
-    $dest = isset($urls[$promise]) ? $urls[$promise] : false;
-
-    // process Aliases ... they start with '#'
-
-    function __is_hash($s) {
-      return is_string($s) && strlen($s) > 0 && $s[0] === '#';
-    }
-
-    while ( __is_hash($dest) ) {
-      $promise = substr($dest, 1);
-      $dest = isset($urls[$promise]) ? $urls[$promise] : false;
-    }
-
-    if (false !== $dest) {
-      $short = $promise;  // keep this for info and QR-code gen
-      $url = false;
-      $expiry = false;
-      if (is_array($dest)) {
-
-        if (array_is_list($dest)) {
-          $url = isset($dest[0]) ? $dest[0] : false;
-          $promise = isset($dest[1]) ? $dest[1] : DEFAULT_REDIRECTION_CODE;
-          $expiry = isset($dest[2]) ? $dest[2] : false;
-        } else {
-          if (isset($dest['plugin']) && !empty($dest['plugin'])) {
-            $url = sanitize($dest['plugin']);
-            $promise = $dest;
-            unset($promise['plugin']);
-            $command = '+';
-          } else {
-            $url = isset($dest['url']) ? $dest['url'] : false;
-            $promise = isset($dest['code']) ? $dest['code'] : DEFAULT_REDIRECTION_CODE;
-          }
-        }
-      } else if (is_string($dest)) {
-        if (strpos($dest, ',')) {
-          $tmp = array_map('trim', explode(',', $dest));
-          $url = isset($tmp[0]) ? $tmp[0] : false;
-          $promise = isset($tmp[1]) ? $tmp[1] : DEFAULT_REDIRECTION_CODE;
-          $expiry = isset($tmp[2]) ? $tmp[2] : false;
-        } else {
-          // just a simple string
-          $url = $dest;
-          $promise = DEFAULT_REDIRECTION_CODE;
-        }
-      }  // `$url == false` will handle the rest
-
-      if (false == $url) {
+  /*
+  * Note: Data will always load from in-file '$config->json_data_filename',
+  * but once loaded the content of the json may override the $config object.
+  */
+  if ($command === false) {
+    if ((false === $urls) && file_exists($config->json_data_filename)) {
+      $json_data = json_decode_helper( @file_get_contents($config->json_data_filename) );
+      if ((null == $json_data) || (JSON_ERROR_NONE !== json_last_error()) ) {
         $command = 'e';
+        $content = '<p>JSON error <b>' . json_last_error_text() . '</b> in file <code>' . $config->json_data_filename . '</code></p>';
         $promise = 500;
-      } else if (false !== $expiry) {
-        $expiry = strtotime($expiry);
+      } else {
+        if (isset($json_data['urls'])) $urls = $json_data['urls'];
+        if (isset($json_data['config'])) $config = (object) array_merge( (array) $config, $json_data['config'] );
       }
-
-      if (('u' == $command) && (false !== $special)) $command = $special;
-
-    } else if ('0' == $promise) {
-      // no default, so show hello
-      $command = 'h';
     } else {
-      // URL not found conditon!
-      $command = 'e';
-      $short = $promise;
-      $promise = 404;
+      // JSON file not there, ask for it; a.k.a. needs install
+      $command = 'x';
     }
   }
-}
 
-// all is good, but has it expired?
-if ((false !== $expiry) && ($expiry <= time())) {
-  $command = 'e';
-  $short = $promise;
-  $promise = 418;
-}
+  if (DEBUG) {
+    if (isset($config->base_url)) unset($config->base_url);
+  }
 
-/* ┌─────────────────────────────────┐
- * │  This is the command processor  │
- * └─────────────────────────────────┘
- */
+  processQueryString('e');  // Errors
+  if (('e' == $command) && !$promise) $promise = 405;
 
-$title = $config->default_title;
-$inc_fa = false;
-$inc_js = false;
-$inc_highlighter = false;
-$color = 'default';
+  processQueryString('u');  // URL
+  /* Special case where .htaccess file 'generate's a query string like this `u=f=logo.svg` */
+  if ( ('u' == $command) && (strlen($promise) > 2) && isSecondCharAnEqual($promise) )  {
+    $command = strtolower( substr($promise, 0, 1) );
+    $promise = substr($promise, 2);
+  }
 
-if (property_exists($config, 'matomo') && isset($config->matomo)) {
-  recordToMatomo();
-}
+  processQueryString('@');  // asking for QR-code
+  processQueryString('*');  // asking for sitemap.xml
 
-if (property_exists($config, 'log') && isset($config->log) && ($config->log !== false)) {
-  recordToLogFile();
-}
+  if (!$command) {
+    // Command not set yet, so assume it's a redirection URL
+    $command = 'u';
+    $promise = getCurrentQuery();
+  }
 
-switch ($command) {
-
-  case '-':
-    // --- info page ---
-
-    $heading = '<i class="fa fa-circle-info"></i> Info';
-    $inc_fa = true;
-    if (DEBUG) {
-      $filename = getCurrentUrl() . '?u=' . $short . '@';
-    } else {
-      $filename = generateQRCodeURL($url, $config->qr_code_engine);
+  // ----- Special cases -----
+  if ($command == 'u') {
+    if (($promise == '*') || ($promise == '@') || ($promise == '-')) {
+      $command = $promise;
+      $promise = false;
     }
-    $content = '<p class="">';
-    if (!empty($short)) $content .= 'Short URL = <code>' . $short . '</code><br>';
-    if (!empty($url)) $content .= 'Destination URL = <code>' . $url . '</code><br>';
-    if (!empty($promise)) $content .= 'Redirecting with code: <code>' . $promise . '</code>';
-    $content .= '</p>';
+  }
 
-    if (!empty($url)) $content .= '<p class="text-center"><img src="' . $filename . '" class="img-fluid img-thumbnail img-qrcode"></p>';
-    if (!empty($url)) $content .= '<div class="text-center"><a class="btn btn-lg btn-outline-secondary" href="' . $url . '"' .
-                ' title="' . $url . '"' .
-                ' target="_blank"' .
-                '>' . mb_strimwidth($url, 0, 25, '...') . ' <i class="ml-2 fas fa-up-right-from-square"></i></a></div>';
+  /* ┌────────────┐
+   * │  Lets go!  │
+   * └────────────┘
+   */
+  if (in_array($command, ['u', '@', '-']))  {
+    // no query situation - if there is a url named `0` then do that, else show hello screen ;)
+    if (empty($promise)) $promise = '0';
 
-    break;
+    // Lets go! ... find the url in the datafile
 
-  case '@':
-    // --- QR-code ---
-
-    // 'qr_content_type' => 'image/svg+xml',
-    // 'qr_file_ext' => '.svg',
-
-    $url = generateQRCodeURL($url, $config->qr_code_engine);
-
-    if (isset($config->qr_content_type)) {
-      $filename = isset($config->qr_file_ext) ? sanitize($short) . $config->qr_file_ext : false;
-      http_get_and_print_remote_file($url, $config->qr_content_type, $filename);
-    } else {
-      http_response_redirection($url, 307, 0);  // always 307, always no-cache
-    }
-    die(); // !!!
-    break;
-
-  case '*':
-    // --- SiteMap.XML ---
-
-    if (!$config->private) {
-
-      header('Content-Type: text/xml', true);
-      header('Content-Disposition: inline; filename="sitemap.xml"');
-
-      echo '<?xml version="1.0" encoding="UTF-8"?>' . PHP_EOL;
-      // echo '<!-- This should never get called. The robots.txt file prohibits it. -->' . PHP_EOL;
-      // echo '<?xml-stylesheet type="text/xsl" href="sitemap.xsl"' . '?' . '>' . PHP_EOL;
-      echo '<urlset' .
-        ' xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"' .
-        // ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"' .
-        // ' xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd"' .
-        '>' . PHP_EOL;
-
-      if (!empty($urls)) {
-        foreach ($urls as $short => $url) {
-          echo "\t" .'<url>';
-          echo '<loc>' . add_trailing_slash(getCurrentUrl()) . '?u=' . rawurlencode($short) . '</loc>';
-          // not doing `<lastmod>`
-          echo '</url>' . PHP_EOL;
+    if (false !== $urls) {
+      $promise = strtolower($promise);
+      if (in_array($command, ['@', '-'])) {
+        $special = $command;
+      } else {
+        $special = substr($promise, -1);
+        if (in_array($special, ['@', '-'])) {
+          $promise = substr($promise, 0, strlen($promise) - 1);
+        } else {
+          $special = false;
         }
       }
-      echo '</urlset>';
-      die(); // !!!
 
-    } else {
+      $dest = isset($urls[$promise]) ? $urls[$promise] : false;
 
-      $command = 'e';
-      $promise = 401;
+      // process Aliases ... they start with '#'
 
-    }
-    break;
-
-  case '+':
-    // --- Plugin engine ---
-
-    $fn = 'plugin_' . $url . '.php';
-    if (file_exists($fn)) {
-
-      @include_once( $fn );  // load the plugin
-
-      $cnf = 'plugin_' . $url;  // extract configuration from config
-      if (isset($config->$cnf)) {
-        $cnf = json_decode(json_encode($config->$cnf), true);  // nasty, but can go deep
-      } else {
-        $cnf = array();
+      function __is_hash($s) {
+        return is_string($s) && strlen($s) > 0 && $s[0] === '#';
       }
 
-      $cnf['short'] = $short;
-      $cnf['self'] = strip_trailing_slash(getCurrentUrl());
+      while ( __is_hash($dest) ) {
+        $promise = substr($dest, 1);
+        $dest = isset($urls[$promise]) ? $urls[$promise] : false;
+      }
 
-      $fn = 'f_' . $url . '_redirection';
-      if (isset($special)) {
-        switch ($special) {
-          case '@':
-            $fn .= '_at';
-            $cnf['qr_code_engine'] = $config->qr_code_engine;
-            if (isset($config->qr_content_type))
-              $cnf['qr_content_type'] = $config->qr_content_type;
-            if (isset($config->qr_file_ext))
-              $cnf['qr_file_ext'] = $config->qr_file_ext;
-            break;
-          case '-':
-            $fn .= '_dash';
-            break;
+      if (false !== $dest) {
+        $short = $promise;  // keep this for info and QR-code gen
+        $url = false;
+        $expiry = false;
+        if (is_array($dest)) {
+
+          if (array_is_list($dest)) {
+            $url = isset($dest[0]) ? $dest[0] : false;
+            $promise = isset($dest[1]) ? $dest[1] : DEFAULT_REDIRECTION_CODE;
+            $expiry = isset($dest[2]) ? $dest[2] : false;
+          } else {
+            if (isset($dest['plugin']) && !empty($dest['plugin'])) {
+              $url = sanitize($dest['plugin']);
+              $promise = $dest;
+              unset($promise['plugin']);
+              $command = '+';
+            } else {
+              $url = isset($dest['url']) ? $dest['url'] : false;
+              $promise = isset($dest['code']) ? $dest['code'] : DEFAULT_REDIRECTION_CODE;
+            }
           }
+        } else if (is_string($dest)) {
+          if (strpos($dest, ',')) {
+            $tmp = array_map('trim', explode(',', $dest));
+            $url = isset($tmp[0]) ? $tmp[0] : false;
+            $promise = isset($tmp[1]) ? $tmp[1] : DEFAULT_REDIRECTION_CODE;
+            $expiry = isset($tmp[2]) ? $tmp[2] : false;
+          } else {
+            // just a simple string
+            $url = $dest;
+            $promise = DEFAULT_REDIRECTION_CODE;
+          }
+        }  // `$url == false` will handle the rest
+
+        if (false == $url) {
+          $command = 'e';
+          $promise = 500;
+        } else if (false !== $expiry) {
+          $expiry = strtotime($expiry);
+        }
+
+        if (('u' == $command) && (false !== $special)) $command = $special;
+
+      } else if ('0' == $promise) {
+        // no default, so show hello
+        $command = 'h';
+      } else {
+        // URL not found conditon!
+        $command = 'e';
+        $short = $promise;
+        $promise = 404;
       }
-      if (function_exists($fn)) {
-        $result = $fn($promise, $cnf); // call the plugin function, with conf.
-        if ($result) {
-          die(); // !!! All good, plugin did its thing.
+    }
+  }
+
+  // all is good, but has it expired?
+  if ((false !== $expiry) && ($expiry <= time())) {
+    $command = 'e';
+    $short = $promise;
+    $promise = 418;
+  }
+
+  /* ┌─────────────────────────────────┐
+   * │  This is the command processor  │
+   * └─────────────────────────────────┘
+   */
+
+  $title = $config->default_title;
+  $inc_fa = false;
+  $inc_js = false;
+  $inc_highlighter = false;
+  $color = 'default';
+
+  if (property_exists($config, 'matomo') && isset($config->matomo)) {
+    recordToMatomo();
+  }
+
+  if (property_exists($config, 'log') && isset($config->log) && ($config->log !== false)) {
+    recordToLogFile();
+  }
+
+  switch ($command) {
+
+    case '-':
+      // --- info page ---
+
+      $heading = '<i class="fa fa-circle-info"></i> Info';
+      $inc_fa = true;
+      if (DEBUG) {
+        $filename = getCurrentUrl() . '?u=' . $short . '@';
+      } else {
+        $filename = generateQRCodeURL($url, $config->qr_code_engine);
+      }
+      $content = '<p class="">';
+      if (!empty($short)) $content .= 'Short URL = <code>' . $short . '</code><br>';
+      if (!empty($url)) $content .= 'Destination URL = <code>' . $url . '</code><br>';
+      if (!empty($promise)) $content .= 'Redirecting with code: <code>' . $promise . '</code>';
+      $content .= '</p>';
+
+      if (!empty($url)) $content .= '<p class="text-center"><img src="' . $filename . '" class="img-fluid img-thumbnail img-qrcode"></p>';
+      if (!empty($url)) $content .= '<div class="text-center"><a class="btn btn-lg btn-outline-secondary" href="' . $url . '"' .
+                  ' title="' . $url . '"' .
+                  ' target="_blank"' .
+                  '>' . mb_strimwidth($url, 0, 25, '...') . ' <i class="ml-2 fas fa-up-right-from-square"></i></a></div>';
+
+      break;
+
+    case '@':
+      // --- QR-code ---
+
+      // 'qr_content_type' => 'image/svg+xml',
+      // 'qr_file_ext' => '.svg',
+
+      $url = generateQRCodeURL($url, $config->qr_code_engine);
+
+      if (isset($config->qr_content_type)) {
+        $filename = isset($config->qr_file_ext) ? sanitize($short) . $config->qr_file_ext : false;
+        http_get_and_print_remote_file($url, $config->qr_content_type, $filename);
+      } else {
+        http_response_redirection($url, 307, 0);  // always 307, always no-cache
+      }
+      die(); // !!!
+      break;
+
+    case '*':
+      // --- SiteMap.XML ---
+
+      $private = !empty($urls['0']);
+      if (!$private) {
+
+        header('Content-Type: text/xml', true);
+        header('Content-Disposition: inline; filename="sitemap.xml"');
+
+        echo '<?xml version="1.0" encoding="UTF-8"?>' . PHP_EOL;
+        // echo '<!-- This should never get called. The robots.txt file prohibits it. -->' . PHP_EOL;
+        // echo '<?xml-stylesheet type="text/xsl" href="sitemap.xsl"' . '?' . '>' . PHP_EOL;
+        echo '<urlset' .
+          ' xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"' .
+          // ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"' .
+          // ' xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd"' .
+          '>' . PHP_EOL;
+
+        if (!empty($urls)) {
+          foreach ($urls as $short => $url) {
+            echo "\t" .'<url>';
+            echo '<loc>' . strip_trailing_slash(getCurrentUrl()) . '?u=' . rawurlencode($short) . '</loc>';
+            // not doing `<lastmod>`
+            echo '</url>' . PHP_EOL;
+          }
+        }
+        echo '</urlset>';
+        die(); // !!!
+
+      } else {
+
+        $command = 'e';
+        $promise = 401;
+
+      }
+      break;
+
+    case '+':
+      // --- Plugin engine ---
+
+      $fn = 'plugin_' . $url . '.php';
+      if (file_exists($fn)) {
+
+        global $semaphore;
+        $semaphore = true;
+
+        @include_once( $fn );  // load the plugin
+
+        $cnf = 'plugin_' . $url;  // extract configuration from config
+        if (isset($config->$cnf)) {
+          $cnf = json_decode(json_encode($config->$cnf), true);  // nasty, but can go deep
+        } else {
+          $cnf = array();
+        }
+
+        $cnf['short'] = $short;
+        $cnf['self'] = strip_trailing_slash(getCurrentUrl());
+
+        $fn = 'f_' . $url . '_redirection';
+        if (isset($special)) {
+          switch ($special) {
+            case '@':
+              $fn .= '_at';
+              $cnf['qr_code_engine'] = $config->qr_code_engine;
+              if (isset($config->qr_content_type))
+                $cnf['qr_content_type'] = $config->qr_content_type;
+              if (isset($config->qr_file_ext))
+                $cnf['qr_file_ext'] = $config->qr_file_ext;
+              break;
+            case '-':
+              $fn .= '_dash';
+              break;
+            }
+        }
+        if (function_exists($fn)) {
+          $result = $fn($promise, $cnf); // call the plugin function, with conf.
+          if ($result) {
+            die(); // !!! All good, plugin did its thing.
+          } else {
+            $command = 'e';
+            if (!is_numeric($promise)) {
+              $promise = 500;
+            } elseif ($promise < 500 || $promise > 599) {
+              $promise = 510;
+            }
+            if (isset($error) && !!$error) {
+              $content = '<h2 class="text-center"><small class="text-muted">';
+              $content .= '<tt>' . strtoupper($url) . '</tt> Plugin Error: ';
+              $content .= '<i>' . $error . '</i>';
+              $content .= '</small></h2>';
+            }
+          }
         } else {
           $command = 'e';
-          if (!is_numeric($promise)) {
-            $promise = 500;
-          } elseif ($promise < 500 || $promise > 599) {
-            $promise = 510;
-          }
-          if (isset($error) && !!$error) {
-            $content = '<h2 class="text-center"><small class="text-muted">';
-            $content .= '<tt>' . strtoupper($url) . '</tt> Plugin Error: ';
-            $content .= '<i>' . $error . '</i>';
-            $content .= '</small></h2>';
-          }
+          $promise = 501;
+          $url = $fn . '()';
         }
       } else {
         $command = 'e';
         $promise = 501;
-        $url = $fn . '()';
       }
-    } else {
-      $command = 'e';
-      $promise = 501;
-    }
-    break;
+      break;
 
-  case 'e':
-    /* ┌─────────────────────────────────┐
-     * │  Ignore for now, process later  │
-     * └─────────────────────────────────┘
-     */
-    break;
+    case 'e':
+      /* ┌─────────────────────────────────┐
+       * │  Ignore for now, process later  │
+       * └─────────────────────────────────┘
+       */
+      break;
 
-  case 'h':
-    $heading = '<i class="fas fa-handshake"></i> Hello';
-    $inc_fa = true;
-    $content = '<div class="text-center">My name is <tt><b>' . $_SERVER['SERVER_NAME'] . '</b></tt></div>';
-    break;
+    case 'h':
+      $heading = '<i class="fas fa-handshake"></i> Hello';
+      $inc_fa = true;
+      $content = '<div class="text-center">My name is <tt><b>' . $_SERVER['SERVER_NAME'] . '</b></tt></div>';
+      break;
 
-  case 'f':
-    // --- Include files, inline ---
-    if ( !empty($images) ) {
-      $promise = strtolower($promise);  // lowercase filenames!
-      if (array_key_exists($promise, $images)) {
+    case 'f':
+      // --- Include files, inline ---
+      if ( !empty($images) ) {
+        $promise = strtolower($promise);  // lowercase filenames!
+        if (array_key_exists($promise, $images)) {
 
-        $ct = isset($images[$promise]['c']) ? $images[$promise]['c'] : 'text/plain';
+          $ct = isset($images[$promise]['c']) ? $images[$promise]['c'] : 'text/plain';
 
-        if (isset($images[$promise]['d']) && !empty(isset($images[$promise]['d']))) {
-          if (isset($images[$promise]['b']) && $images[$promise]['b']) {
-            $content = base64_decode( $images[$promise]['d'] );
+          if (isset($images[$promise]['d']) && !empty(isset($images[$promise]['d']))) {
+            if (isset($images[$promise]['b']) && $images[$promise]['b']) {
+              $content = base64_decode( $images[$promise]['d'] );
+            } else {
+              $content = $images[$promise]['d'];
+            }
           } else {
-            $content = $images[$promise]['d'];
+            $content = '';
           }
+
+          $hold = isset($images[$promise]['h']) ? intval($images[$promise]['h']) : DEFAULT_CACHE_TIME;
+
+          header('Content-Type: ' . $ct, true);
+          header('Content-Disposition: inline; filename="' . $promise . '"');
+          http_response_cache_for( $hold );
+          print( $content );
+
+          die(); // !!!
+
         } else {
-          $content = '';
+          $content = '<p class="h3 text-center">File <code>' . $promise . '</code> not found</p>';
+          $promise = 404;
+        }
+      }
+
+      $command = 'e';  // if you got here then you're in error
+      break;
+
+    case 'u':
+      /* ┌───────────────────┐
+       * │  URL redirection  │
+       * └───────────────────┘
+       */
+
+      $promise = validateRedirectionHtmlResponseCode($promise);  // Just to make sure :)
+      if ((302 == $promise) || (307 == $promise)) {
+        http_response_cache_now();
+      }
+
+      if (DEBUG) {
+        $heading = '<i class="fas fa-location-arrow"></i> ' . $promise . ' <small class="text-danger">DEBUG</small>';
+        $inc_fa = true;
+        $content = '<div class="text-center"><a class="btn btn-lg btn-outline-secondary" href="' . $url . '"' .
+          ' title="' . $url . '"' .
+          ' target="_blank"' .
+          '>' . mb_strimwidth($url, 0, 35, '...') . ' <i class="ml-2 fas fa-up-right-from-square"></i></a></div>';
+      } else {
+        $cache_for = DEFAULT_CACHE_TIME;
+        if (isset($expiry) && (false !== $expiry)) {
+          $now = time();
+          $delta = $expiry - $now;
+          if ($delta < $cache_for) $cache_for = $delta;
         }
 
-        $hold = isset($images[$promise]['h']) ? intval($images[$promise]['h']) : DEFAULT_CACHE_TIME;
-
-        header('Content-Type: ' . $ct, true);
-        header('Content-Disposition: inline; filename="' . $promise . '"');
-        http_response_cache_for( $hold );
-        print( $content );
+        http_response_redirection($url, $promise, $cache_for);  // !!! GETS GO!
 
         die(); // !!!
-
-      } else {
-        $content = '<p class="h3 text-center">File <code>' . $promise . '</code> not found</p>';
-        $promise = 404;
       }
+      break;
+
+    case 'x':
+      // --- No JSON file ---
+
+      $heading = '<b class="text-danger">Error:</b> Site not set up';
+
+      $content = '<p class="card-text">File <code>' . $config->json_data_filename . '</code> not found.</p>
+    <p class="card-text">Please create this file on the base folder of the server with the following content:<br>
+    <pre class="border p-1 shadow"><code class="language-json">{
+    "urls": {
+      "x": "https://{your_url}",
+      "y": [ "https://{your_url}", 302 ]
     }
+  }</code></pre>
+    </p>
+    <p>Read the docs <a target="_blank" href="https://github.com/silvinor/clickit-url-shortener/blob/master/docs/readme.md">here</a>.</p>';
 
-    $command = 'e';  // if you got here then you're in error
-    break;
+      $href = 'https://github.com/silvinor/clickit-url-shortener';
+      $href = '';
+      $btn_text = '<i class="fa-brands fa-github-alt"></i> View project';
+      $color = 'info';
+      $inc_highlighter = true;
+      break;
 
-  case 'u':
-    /* ┌───────────────────┐
-     * │  URL redirection  │
-     * └───────────────────┘
-     */
+    default:
+      /* ┌────────────────────────────────┐
+       * │  WTF?  You shouldn't be here!  │
+       * └────────────────────────────────┘
+       */
+      $color = 'secondary';
+      $heading = '<b>WTF</b> <i class="fas fa-question"></i>';
+      $inc_fa = true;
 
-    $promise = validateRedirectionHtmlResponseCode($promise);  // Just to make sure :)
-    if ((302 == $promise) || (307 == $promise)) {
+      if (!isset($content)) $content = '';
+      $content .= var_dump_ret($command, '$command');
+      $content .= var_dump_ret($promise, '$promise');
+      $content .= var_dump_ret($url, '$url');
+      $content .= var_dump_ret($short, '$short');
+      header('X-Server-Error: WTF?', true, 500);
+      http_response_code(500);
       http_response_cache_now();
+  }
+
+  if ('e' == $command) { // Error page, common
+    // ----- Error -----
+    if (!is_numeric($promise) || ($promise < 100) || ($promise > 599)) $promise = 501;
+    http_response_code($promise);
+    header('X-Server-Error: ' . $promise, true, $promise);
+
+    if ($promise >= 100 && $promise <= 199) {
+      $_fa = 'circle-info';
+      $color = 'info';
+    } elseif ($promise >= 200 && $promise <= 299) {
+      $_fa = 'thumbs-up';
+      $color = 'success';
+    } elseif ($promise >= 300 && $promise <= 399) {
+      $_fa = 'location-arrow';
+      $color = 'primary';
+    } elseif ($promise >= 400 && $promise <= 499 && $promise <> 404) {
+      $_fa = 'circle-exclamation';
+      $color = 'warning';
+    } else {
+      $_fa = 'triangle-exclamation';
+      $color = 'danger';
     }
+
+    // Build string for some 4xx, and the 500 client response codes
+    if (empty($content)) {
+      $content .= '<h2 class="text-center"><small class="text-muted">';
+      switch ($promise) {
+        case 400: $content .= 'Bad Request'; break;
+        case 401: $content .= 'Unauthorized'; break;
+        case 402: $content .= 'Payment Required'; break;
+        case 403: $content .= 'Forbidden'; break;
+        case 404:
+          if (!$short) {
+            $content .= 'Not Found';
+          } else {
+            $content .= 'URL not found';
+          }
+          break;
+        case 410: $content .= 'Gone'; break;
+        case 418: $content .= 'Expired'; break;  // I'm a tea pot!!
+        case 500: $content .= 'Internal Server Error'; break;
+        case 501:
+          $content .= 'Not Implemented';
+          if (!empty($url)) $content .= ': <code>' . $url . '</code>';
+          break;
+        default: break;
+      }
+      $content .= '</small></h2>';
+    }
+
+    $heading = '<i class="fas fa-' . $_fa . '"></i> ' . $promise;
+    $heading = '<span class="text-' . $color . '">' . $heading . '</span>';
 
     if (DEBUG) {
-      $heading = '<i class="fas fa-location-arrow"></i> ' . $promise . ' <small class="text-danger">DEBUG</small>';
-      $inc_fa = true;
-      $content = '<div class="text-center"><a class="btn btn-lg btn-outline-secondary" href="' . $url . '"' .
-        ' title="' . $url . '"' .
-        ' target="_blank"' .
-        '>' . mb_strimwidth($url, 0, 35, '...') . ' <i class="ml-2 fas fa-up-right-from-square"></i></a></div>';
-    } else {
-      $cache_for = DEFAULT_CACHE_TIME;
-      if (isset($expiry) && (false !== $expiry)) {
-        $now = time();
-        $delta = $expiry - $now;
-        if ($delta < $cache_for) $cache_for = $delta;
-      }
-
-      http_response_redirection($url, $promise, $cache_for);  // !!! GETS GO!
-
-      die(); // !!!
+      echo '<!--' . PHP_EOL;
+      var_dump_ret($command, '$command', true);
+      var_dump_ret($promise, '$promise', true);
+      var_dump_ret($url, '$url', true);
+      var_dump_ret($short, '$short', true);
+      echo '-->';
     }
-    break;
-
-  case 'x':
-    // --- No JSON file ---
-
-    $heading = '<b class="text-danger">Error:</b> Site not set up';
-
-    $content = '<p class="card-text">File <code>' . $config->json_data_filename . '</code> not found.</p>
-  <p class="card-text">Please create this file on the base folder of the server with the following content:<br>
-  <pre class="border p-1 shadow"><code class="language-json">{
-  "urls": {
-    "x": "https://{your_url}",
-    "y": [ "https://{your_url}", 302 ]
-  }
-}</code></pre>
-  </p>
-  <p>Read the docs <a target="_blank" href="https://github.com/silvinor/clickit-url-shortener/blob/master/docs/readme.md">here</a>.</p>';
-
-    $href = 'https://github.com/silvinor/clickit-url-shortener';
-    $href = '';
-    $btn_text = '<i class="fa-brands fa-github-alt"></i> View project';
-    $color = 'info';
-    $inc_highlighter = true;
-    break;
-
-  default:
-    /* ┌───────────────────────────────┐
-     * │  WTF?  You shoudn't be here!  │
-     * └───────────────────────────────┘
-     */
-    $color = 'secondary';
-    $heading = '<b>WTF</b> <i class="fas fa-question"></i>';
     $inc_fa = true;
 
-    if (!isset($content)) $content = '';
-    $content .= var_dump_ret($command, '$command');
-    $content .= var_dump_ret($promise, '$promise');
-    $content .= var_dump_ret($url, '$url');
-    $content .= var_dump_ret($short, '$short');
-    header('X-Server-Error: WTF?', true, 500);
-    http_response_code(500);
-    http_response_cache_now();
-}
-
-if ('e' == $command) { // Error page, common
-  // ----- Error -----
-  if (!is_numeric($promise) || ($promise < 100) || ($promise > 599)) $promise = 501;
-  http_response_code($promise);
-  header('X-Server-Error: ' . $promise, true, $promise);
-
-  if ($promise >= 100 && $promise <= 199) {
-    $_fa = 'circle-info';
-    $color = 'info';
-  } elseif ($promise >= 200 && $promise <= 299) {
-    $_fa = 'thumbs-up';
-    $color = 'success';
-  } elseif ($promise >= 300 && $promise <= 399) {
-    $_fa = 'location-arrow';
-    $color = 'primary';
-  } elseif ($promise >= 400 && $promise <= 499 && $promise <> 404) {
-    $_fa = 'circle-exclamation';
-    $color = 'warning';
-  } else {
-    $_fa = 'triangle-exclamation';
-    $color = 'danger';
-  }
-
-  // Build string for some 4xx, and the 500 client response codes
-  if (empty($content)) {
-    $content .= '<h2 class="text-center"><small class="text-muted">';
-    switch ($promise) {
-      case 400: $content .= 'Bad Request'; break;
-      case 401: $content .= 'Unauthorized'; break;
-      case 402: $content .= 'Payment Required'; break;
-      case 403: $content .= 'Forbidden'; break;
-      case 404:
-        if (!$short) {
-          $content .= 'Not Found';
-        } else {
-          $content .= 'URL not found';
-        }
-        break;
-      case 410: $content .= 'Gone'; break;
-      case 418: $content .= 'Expired'; break;  // I'm a tea pot!!
-      case 500: $content .= 'Internal Server Error'; break;
-      case 501:
-        $content .= 'Not Implemented';
-        if (!empty($url)) $content .= ': <code>' . $url . '</code>';
-        break;
-      default: break;
+    if ((410 == $promise) || (418 == $promise)) {
+      if (418 == $promise) header('HTTP/1.1 418 Expired', true, 418);  // Override I'm a teapot
+      http_response_cache_never();
+    } else {
+      http_response_cache_now();
     }
-    $content .= '</small></h2>';
   }
 
-  $heading = '<i class="fas fa-' . $_fa . '"></i> ' . $promise;
-  $heading = '<span class="text-' . $color . '">' . $heading . '</span>';
-
-  if (DEBUG) {
-    echo '<!--' . PHP_EOL;
-    var_dump_ret($command, '$command', true);
-    var_dump_ret($promise, '$promise', true);
-    var_dump_ret($url, '$url', true);
-    var_dump_ret($short, '$short', true);
-    echo '-->';
-  }
-  $inc_fa = true;
-
-  if ((410 == $promise) || (418 == $promise)) {
-    if (418 == $promise) header('HTTP/1.1 418 Expired', true, 418);  // Override I'm a teapot
-    http_response_cache_never();
-  } else {
-    http_response_cache_now();
-  }
-}
-
-/* ┌─────────────────────────────┐
- * │  HTML Goodness starts here  │
- * └─────────────────────────────┘
- */
+  /* ┌─────────────────────────────┐
+   * │  HTML Goodness starts here  │
+   * └─────────────────────────────┘
+   */
 
 ?><!doctype html>
 <html lang="en">
@@ -1255,17 +1264,19 @@ if ('e' == $command) { // Error page, common
   });
 </script>
 <?php
-  }
-
-  $analiticsHtml = __DIR__ . '/analitics.html';
-  if (file_exists($analiticsHtml)) {
-    $contents = @file_get_contents($analiticsHtml);
-    if ($contents !== false) {
-      echo $contents;
-    } else {
-      echo "<!-- Unable to read " . $analiticsHtml . " file. -->";
     }
-  }
+
+    $analiticsHtml = __DIR__ . '/analitics.html';
+    if (file_exists($analiticsHtml)) {
+      $contents = @file_get_contents($analiticsHtml);
+      if ($contents !== false) {
+        echo $contents;
+      } else {
+        echo "<!-- Unable to read " . $analiticsHtml . " file. -->";
+      }
+    }
 ?>
 </body>
 </html>
+<?php
+}

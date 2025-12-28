@@ -14,6 +14,11 @@
  * ╚═════════════════════════════════════════════════════════════════════════╝
  */
 
+if (!isset($GLOBALS['semaphore'])) {
+  http_response_code(418);
+  exit(1);
+}
+
 const GEOIP_REDIRECTION_CODE = 307;
 const GEOIP_SERVICE_URL = 'service_url';
 const GEOIP_SERVICE_TOKEN = 'service_token';

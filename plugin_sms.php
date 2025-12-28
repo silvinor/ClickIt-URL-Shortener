@@ -1,5 +1,10 @@
 <?php
 
+if (!isset($GLOBALS['semaphore'])) {
+  http_response_code(418);
+  exit(1);
+}
+
 /* Alias for `mailsms` plugin */
 
 @include_once 'plugin_mailsms.php';

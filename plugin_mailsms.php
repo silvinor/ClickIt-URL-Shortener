@@ -1,5 +1,10 @@
 <?php
 
+if (!isset($GLOBALS['semaphore'])) {
+  http_response_code(418);
+  exit(1);
+}
+
 const MAIL_SMS_REDIRECTION_CODE = 307;
 
 function f_mailsms_isvalid_email($address) {
