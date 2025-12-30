@@ -474,7 +474,7 @@ function sanitize($string) {
 /**
  * Get / Generate a Unique Client ID
  */
-function getUserID($visitorIp = flase) {
+function getUserID($visitorIp = false) {
   global $uid, $dnt;
 
   if ($visitorIp === false) $visitorIp = $_SERVER['REMOTE_ADDR'];
@@ -492,6 +492,51 @@ function getUserID($visitorIp = flase) {
   if (!$dnt) setcookie('uid', $uid, strtotime('+1 year')); // Remember
 
   return $uid;
+}
+
+/**
+ * Convert destination data to a more manageable array
+ */
+function parse_destination($dest) {
+  $ret = [];
+  if (is_array($dest)) {
+    if (array_is_list($dest)) {
+      $ret['u'] = isset($dest[0]) ? $dest[0] : false;
+      $ret['p'] = isset($dest[1]) ? $dest[1] : DEFAULT_REDIRECTION_CODE;
+      $ret['x'] = isset($dest[2]) ? $dest[2] : false;
+    } else {
+      if (isset($dest['plugin']) && !empty($dest['plugin'])) {
+        $ret['u'] = sanitize($dest['plugin']);
+        $ret['p'] = $dest;
+        $ret['x'] = false;
+        $ret['c'] = '+'; // special case
+      } else {
+        $ret['u'] = isset($dest['url']) ? $dest['url'] : false;
+        $ret['p'] = isset($dest['code']) ? $dest['code'] : DEFAULT_REDIRECTION_CODE;
+        $ret['x'] = isset($dest['expire']) ? $dest['expire'] : false;
+      }
+    }
+  } else if (is_string($dest)) {
+    if (strpos($dest, ',')) {
+      $_tmp = array_map('trim', explode(',', $dest));
+      $ret['u'] = isset($_tmp[0]) ? $_tmp[0] : false;
+      $ret['p'] = isset($_tmp[1]) ? $_tmp[1] : DEFAULT_REDIRECTION_CODE;
+      $ret['x'] = isset($_tmp[2]) ? $_tmp[2] : false;
+    } else {
+      // just a simple string
+      $ret['u'] = $dest;
+      $ret['p'] = DEFAULT_REDIRECTION_CODE;
+      $ret['x'] = false;
+    }
+  } else {
+    $ret['u'] = $ret['p'] = $ret['x'] = false;  // umm??
+  }
+
+  if (is_string($ret['u']) && isset($ret['u'][0]) && $ret['u'][0] === '#') {
+    $ret['a'] = substr($ret['u'], 1); // Alias
+  }
+
+  return $ret;
 }
 
 /**
@@ -613,7 +658,6 @@ function recordToLogFile() {
   error_log($message, 3, $logfile);
 }
 
-
 /* ---------- End of helpers --------- */
 
 /* ┌────────────────────────────────┐
@@ -652,6 +696,10 @@ function main() {
       } else {
         if (isset($json_data['urls'])) $urls = $json_data['urls'];
         if (isset($json_data['config'])) $config = (object) array_merge( (array) $config, $json_data['config'] );
+      }
+
+      if ($urls !== false) {
+        $urls = array_change_key_case($urls, CASE_LOWER); // Case insensitive shorts
       }
     } else {
       // JSON file not there, ask for it; a.k.a. needs install
@@ -723,42 +771,22 @@ function main() {
 
       while ( __is_hash($dest) ) {
         $promise = substr($dest, 1);
-        $dest = isset($urls[$promise]) ? $urls[$promise] : false;
+        $dest = isset($urls[$promise]) ? strtolower($urls[$promise]) : false;
       }
 
       if (false !== $dest) {
         $short = $promise;  // keep this for info and QR-code gen
         $url = false;
         $expiry = false;
-        if (is_array($dest)) {
 
-          if (array_is_list($dest)) {
-            $url = isset($dest[0]) ? $dest[0] : false;
-            $promise = isset($dest[1]) ? $dest[1] : DEFAULT_REDIRECTION_CODE;
-            $expiry = isset($dest[2]) ? $dest[2] : false;
-          } else {
-            if (isset($dest['plugin']) && !empty($dest['plugin'])) {
-              $url = sanitize($dest['plugin']);
-              $promise = $dest;
-              unset($promise['plugin']);
-              $command = '+';
-            } else {
-              $url = isset($dest['url']) ? $dest['url'] : false;
-              $promise = isset($dest['code']) ? $dest['code'] : DEFAULT_REDIRECTION_CODE;
-            }
-          }
-        } else if (is_string($dest)) {
-          if (strpos($dest, ',')) {
-            $tmp = array_map('trim', explode(',', $dest));
-            $url = isset($tmp[0]) ? $tmp[0] : false;
-            $promise = isset($tmp[1]) ? $tmp[1] : DEFAULT_REDIRECTION_CODE;
-            $expiry = isset($tmp[2]) ? $tmp[2] : false;
-          } else {
-            // just a simple string
-            $url = $dest;
-            $promise = DEFAULT_REDIRECTION_CODE;
-          }
-        }  // `$url == false` will handle the rest
+        $_dst = parse_destination($dest);
+        if (isset($ret['c'])) {
+          unset($promise['plugin']); // fixme: do I need this?
+          $command = $ret['c'];
+        }
+        $url = $_dst['u'];
+        $promise = $_dst['p'];
+        $expiry = $_dst['x'];
 
         if (false == $url) {
           $command = 'e';
@@ -773,7 +801,7 @@ function main() {
         // no default, so show hello
         $command = 'h';
       } else {
-        // URL not found conditon!
+        // URL not found condition!
         $command = 'e';
         $short = $promise;
         $promise = 404;
@@ -869,9 +897,23 @@ function main() {
           '>' . PHP_EOL;
 
         if (!empty($urls)) {
-          foreach ($urls as $short => $url) {
+          foreach ($urls as $short => $dest) {
             echo "\t" .'<url>';
             echo '<loc>' . strip_trailing_slash(getCurrentUrl()) . '?u=' . rawurlencode($short) . '</loc>';
+            echo '<short>' . rawurlencode($short) . '</short>';
+
+            $dest = parse_destination($dest);
+            if (isset($dest['c'])) {
+              if ($dest['c'] == '+') {
+                if (isset($dest['p']) && is_array($dest['p']) && isset($dest['p']['plugin'])) {
+                  echo '<plugin>' . rawurlencode($dest['p']['plugin']) . '</plugin>';
+                }
+              }
+            } else if (isset($dest['a'])) {
+              echo '<alias>' . $dest['a'] . '</alias>';
+            } else {
+              echo '<long>' . $dest['u'] . '</long>';
+            }
             // not doing `<lastmod>`
             echo '</url>' . PHP_EOL;
           }

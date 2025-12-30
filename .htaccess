@@ -6,9 +6,9 @@ Options All -Indexes
   Require all denied
 </files>
 
-<Files "sitemap.xml">
-  Require all denied
-</Files>
+# <Files "sitemap.xml">
+#   Require all denied
+# </Files>
 
 <FilesMatch "\.log$">
   Require all denied
@@ -31,8 +31,8 @@ Options All -Indexes
   RewriteCond %{HTTP_USER_AGENT} (?:gptbot|ccbot|claudebot|anthropicbot|google-extended|bytespider|amazonbot|youbot|phindbot|perplexitybot|kagibot|andi) [NC]
   RewriteRule ^.* - [R=402,L]
 
+  # Redirect sitemap and feed.xml
   RewriteRule ^sitemap\.xml$ index.php?* [L,PT]
-  RewriteRule ^feed/?$ feed.xml [R=303,L]
 
   # Restrict rewriting URLs only to paths that do not actually exists
   RewriteCond %{SCRIPT_FILENAME} !-d
