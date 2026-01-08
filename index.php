@@ -7,7 +7,7 @@
  */
 /* ╔═════════════════════════════════════════════════════════════════════════╗
  * ║                                                                         ║
- * ║  ClickIt-URL-Shortener, © 2024 Silvino R.                               ║
+ * ║  ClickIt-URL-Shortener, © 2011-2026 Silvino R.                          ║
  * ║                                                                         ║
  * ╚═════════════════════════════════════════════════════════════════════════╝
  */
@@ -15,7 +15,7 @@
 const DEFAULT_REDIRECTION_CODE = 307;
 const DEFAULT_CACHE_TIME = (24 * 60 * 60);  // 1 day, in seconds
 const DEFAULT_CURL_TIMEOUT = 15;  // in seconds
-define('DEBUG', (getenv('APP_ENV') === 'development' || ini_get('display_errors')));
+define('DEBUG', (getenv('APP_ENV') === 'development' || ini_get('display_errors')) || (isset($_SERVER['SERVER_PORT']) && !in_array((int) $_SERVER['SERVER_PORT'], [80, 443], true)));
 
 if (DEBUG) {
   ini_set('display_errors', 1);
@@ -28,7 +28,7 @@ global $config, $command, $promise, $content, $short, $url, $error;
 /*
  * You can skip using an external URLs file by populating your list right here.
  * To do that, just uncomment the line below and populate the array with your URLs.
- * Note 1: This will also disable the loading of the `$config` object, so edit that too.
+ * Note 1: This will also disable the loading of the `$config` array, so edit that too.
  * Note 2: API will not work if the file `short_urls.json` is not present.
  */
 /*
@@ -40,12 +40,13 @@ global $config, $command, $promise, $content, $short, $url, $error;
 */
 
 $config = [
+  'crud' => 'json', // default is 'lite'
   'json_data_filename' => 'short_urls.json',
   // Thanks to https://goqr.me/api/doc/create-qr-code/
   'qr_code_engine' => 'https://api.qrserver.com/v1/create-qr-code/?format=svg&color=000000&bgcolor=FFFFFF&qzone=2&margin=0&size=300x300&ecc=L&data={{data}}',
   'qr_content_type' => 'image/svg+xml',
   'qr_file_ext' => '.svg',
-  'extra_css' => '<style>.img-qrcode{width:300px;height:300px}</style>',
+  'extra_css' => '.img-qrcode{width:300px;height:300px}',
   'default_title' => 'c1k.it',
   // Thanks to https://www.srihash.org/ for the SRI Hash Generator
   'bootstrap_css' => [
@@ -100,6 +101,157 @@ $images = [
 ];
 
 
+// ---------- PHP core helpers -----------
+
+function objectToArray($object) {
+  // return json_decode(json_encode($object), true); // alt.
+  if(!is_object($object) && !is_array($object))
+    return $object;
+  return array_map('objectToArray', (array) $object);
+}
+
+function new_array_merge(array $array1, ...$arrays) {
+  $merge = function (array &$base, array $add) use (&$merge) {
+    foreach ($add as $key => $value) {
+      if (is_array($value) && array_key_exists($key, $base) && is_array($base[$key])) {
+        $merge($base[$key], $value);
+      } else {
+        $base[$key] = $value;
+      }
+    }
+  };
+  foreach ($arrays as $array2) {
+    $merge($array1, $array2);
+  }
+  return $array1;
+}
+
+// ---------- CRUD Engine -----------
+
+const LITE_CRUD_ERROR_FILE_NOT_FOUND     = -1;
+
+function __lite_crud_read_file($filename) {
+  global $__lite_crud_error, $__lite_crud_exception;
+  if (!file_exists($filename)) {
+    $__lite_crud_error = LITE_CRUD_ERROR_FILE_NOT_FOUND;
+    return false;
+  }
+  $json = file_get_contents($filename);
+  if ($json === false) return false;
+  try {
+    $data = json_decode($json, true, 16, JSON_BIGINT_AS_STRING | JSON_INVALID_UTF8_SUBSTITUTE | JSON_OBJECT_AS_ARRAY | JSON_THROW_ON_ERROR);
+  } catch (Exception $e) {
+    $__lite_crud_exception = $e;
+    $__lite_crud_error = $e->getCode();
+    return false;
+  }
+  if ($data === null && trim($json) !== '') return false;
+  if (!is_array($data)) $data = [];
+  return ['f' => $filename, 'd' => $data];
+}
+
+function lite_crud_get_error() {
+  global $__lite_crud_error;
+  return isset($__lite_crud_error) ? $__lite_crud_error : false;
+}
+
+function lite_crud_connect($filename) {
+  global $__lite_crud_cache, $__lite_crud_error;
+  if (!isset($__lite_crud_cache) || !is_array($__lite_crud_cache) || !isset($__lite_crud_cache[0]) || $__lite_crud_cache[0] !== true) {
+    $__lite_crud_cache = [0 => true];
+  }
+  $h = false;
+  $count = count($__lite_crud_cache);
+  for ($i = 1; $i < $count; $i++) {
+    if (isset($__lite_crud_cache[$i]['f']) && $__lite_crud_cache[$i]['f'] === $filename) {
+      $h = $i;
+      break;
+    }
+  }
+  if ($h !== false) {
+    $result = __lite_crud_read_file($filename);
+    if ($result === false) {
+      // !! Unlike `json_crud_connect`, this returns false if on file not found
+      // if (isset($__lite_crud_error) && $__lite_crud_error === LITE_CRUD_ERROR_FILE_NOT_FOUND) return $h;
+      return false;
+    }
+    if ($result['d'] !== null) {
+      $__lite_crud_cache[$h] = new_array_merge($__lite_crud_cache[$h], $result);
+    }
+    return $h;
+  }
+  $result = __lite_crud_read_file($filename);
+  if ($result === false) {
+    if (isset($__lite_crud_error) && $__lite_crud_error !== LITE_CRUD_ERROR_FILE_NOT_FOUND) return false;
+    $result = ['f' => $filename, 'd' => []];
+  }
+  $__lite_crud_cache[] = $result;
+  return count($__lite_crud_cache) - 1;
+}
+
+function lite_crud_read($handle, ...$tree) {
+  global $__lite_crud_cache;
+  if ($handle == 0 || !isset($__lite_crud_cache[$handle]) || $__lite_crud_cache[$handle] === false || $__lite_crud_cache[$handle] === []) return false;
+  if (!isset($__lite_crud_cache) || !is_array($__lite_crud_cache) || !isset($__lite_crud_cache[$handle]) || $__lite_crud_cache[$handle] === false || !isset($__lite_crud_cache[$handle]['f']) || empty($__lite_crud_cache[$handle]['f'])) return false;
+  if (!isset($__lite_crud_cache[$handle]['d']) || $__lite_crud_cache[$handle]['d'] === null || $__lite_crud_cache[$handle]['d'] === []) return false;
+  $ref = $__lite_crud_cache[$handle]['d'];
+  if (!empty($tree)) {
+    foreach ($tree as $segment) {
+      if (!is_array($ref)) return false;
+      $key = (is_int($segment) || (is_string($segment) && ctype_digit($segment)))
+        ? (int) $segment
+        : $segment;
+      if (!array_key_exists($key, $ref)) return false;
+      $ref = $ref[$key];
+      if ($ref === null || $ref === '' || (is_array($ref) && $ref === [])) return false;
+    }
+  }
+  if (is_array($ref)) return $ref;
+  if (is_bool($ref)) return $ref ? 1 : 0;
+  if (is_int($ref) || is_float($ref)) return $ref;
+  if (is_string($ref) && is_numeric($ref)) {
+    return (strpos($ref, '.') !== false) ? (float) $ref : (int) $ref;
+  }
+  return $ref;
+}
+
+/* ..... CRUD engine, from NoOOP ..... */
+
+$ce = 'crud.php';
+if (file_exists($ce)) {
+  include_once($ce);
+}
+
+if (!function_exists('crud_get_error')) {
+  function crud_get_error() {
+    return lite_crud_get_error();
+  }
+}
+
+if (!function_exists('crud_connect')) {
+  function crud_connect($connection_str, ...$args) {
+    return lite_crud_connect($connection_str, ...$args);
+  }
+}
+
+if (!function_exists('crud_disconnect')) {
+  function crud_disconnect($handle) {
+    return true; // dummy
+  }
+}
+
+if (!function_exists('crud_read')) {
+  function crud_read($handle, ...$args) {
+    return lite_crud_read($handle, ...$args);
+  }
+}
+
+if (!function_exists('crud_setup')) {
+  function crud_setup($engine = false) {
+    return true; // dummy
+  }
+}
+
 // ---------- Helper functions ---------
 
 /**
@@ -120,7 +272,7 @@ $images = [
  * This means that the resource is now permanently located at another URI, specified.
  * This has the same semantics as the 301 response code, with the exception that the user agent must not change the HTTP method used.
  *
- * @param int $code The code requeted
+ * @param int $code The code requested
  * @return int Returns the code requested if valid, else returns DEFAULT_REDIRECTION_CODE
 */
 function validateRedirectionHtmlResponseCode($code) {
@@ -171,6 +323,7 @@ if (DEBUG) {
     if (!$echo) return $ret;
 
     echo str_replace(['&quot;', '&gt;', '&lt;'], ['"', '>', '<'], strip_tags( $ret ));
+    return true;
   }
 
   function dump_globals($echo = true) {
@@ -193,23 +346,31 @@ function add_trailing_slash($url) {
   return strip_trailing_slash($url) . '/';
 }
 
+function config(...$path) {
+  global $config;
+  if (!isset($config) || (false === $config)) return false;
+  if (!$path) return $config;
+  $current = $config;
+  foreach ($path as $key) {
+    if (!is_array($current) || !array_key_exists($key, $current)) return false;
+    $current = $current[$key];
+  }
+  return $current;
+}
+
 /**
  * Get the URL of the calling PHP file
  * !! not the best implementation, but PHP does not do this well
  */
 function getCurrentUrl() {
-  global $config;
-
-  if (isset($config->base_url) && !empty($config->base_url)) {
-    $base = strip_trailing_slash( $config->base_url );
-  } else {
+  $base = config('base_url');
+  if (false === $base) {
     $base = strip_trailing_slash( 'http' .
       ((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] == 'on') ? 's' : '') .
       '://' .
       $_SERVER['HTTP_HOST'] .
       dirname($_SERVER['PHP_SELF']) );
   }
-
   return add_trailing_slash($base) . basename($_SERVER['PHP_SELF']);
 }
 
@@ -412,46 +573,19 @@ function http_get_and_print_remote_file($file_url, $content_type, $filename = fa
   return !!$content;  // cast as bool
 }
 
-/**
- * Translates the JSON error code to english
- */
-function json_last_error_text() {
-  global $json_exception;
-  if (isset($json_exception)) {
-    $r = $json_exception->getMessage();
-  } else {
-    $e = json_last_error();
-    $r = $e;
-    // @see: https://www.php.net/manual/en/function.json-last-error.php, for descriptions
-    switch ($e) {
-      case JSON_ERROR_DEPTH: $r = 'JSON_ERROR_DEPTH'; break;
-      case JSON_ERROR_STATE_MISMATCH: $r = 'JSON_ERROR_STATE_MISMATCH'; break;
-      case JSON_ERROR_CTRL_CHAR: $r = 'JSON_ERROR_CTRL_CHAR'; break;
-      case JSON_ERROR_SYNTAX: $r = 'JSON_ERROR_SYNTAX'; break;
-      case JSON_ERROR_UTF8: $r = 'JSON_ERROR_UTF8'; break;
-      case JSON_ERROR_RECURSION: $r = 'JSON_ERROR_RECURSION'; break;
-      case JSON_ERROR_INF_OR_NAN: $r = 'JSON_ERROR_INF_OR_NAN'; break;
-      case JSON_ERROR_UNSUPPORTED_TYPE: $r = 'JSON_ERROR_UNSUPPORTED_TYPE'; break;
-      case JSON_ERROR_INVALID_PROPERTY_NAME: $r = 'JSON_ERROR_INVALID_PROPERTY_NAME'; break;
-      case JSON_ERROR_UTF16: $r = 'JSON_ERROR_UTF16'; break;
-    }
-  }
-  return $r;
-}
-
-/**
- * Calls `json_decode` with the correct settings
- */
-function json_decode_helper($string) {
-  global $json_exception;
-  try {
-    $r = json_decode($string, true, JSON_BIGINT_AS_STRING | JSON_INVALID_UTF8_SUBSTITUTE | JSON_OBJECT_AS_ARRAY | JSON_THROW_ON_ERROR );
-  } catch (Exception $e) {
-    $json_exception = clone $e;
-    $r = false;
-  }
-  return $r;
-}
+// /**
+//  * Calls `json_decode` with the correct settings
+//  */
+// function json_decode_helper($string) {
+//   global $json_exception;
+//   try {
+//     $r = json_decode($string, true, JSON_BIGINT_AS_STRING | JSON_INVALID_UTF8_SUBSTITUTE | JSON_OBJECT_AS_ARRAY | JSON_THROW_ON_ERROR );
+//   } catch (Exception $e) {
+//     $json_exception = clone $e;
+//     $r = false;
+//   }
+//   return $r;
+// }
 
 if (!function_exists('array_is_list')) {
   /**
@@ -552,19 +686,18 @@ function parse_destination($dest) {
  * }
  */
 function recordToMatomo() {
-  global $uid, $dnt, $config, $command, $short;
+  global $uid, $dnt, $command, $short;
 
-  if (!property_exists($config, 'matomo') || !isset($config->matomo)) {
-    return false;
-  }
+  $cnf = config('matomo');
+  if (false === $cnf) return false;
 
-  $siteId = isset($config->matomo['id']) ? $config->matomo['id'] : false;
-  $matomoUrl = isset($config->matomo['url']) ? $config->matomo['url'] : false;
+  $siteId = isset($cnf['id']) ? $cnf['id'] : false;
+  $matomoUrl = isset($cnf['url']) ? $cnf['url'] : false;
   if (!$siteId || !$matomoUrl) {
     return false;
   }
   $matomoUrl = add_trailing_slash($matomoUrl) . 'matomo.php'; // API call
-  $timeOut = isset($config->matomo['timeout']) ? $config->matomo['timeout'] : DEFAULT_CURL_TIMEOUT;
+  $timeOut = isset($cnf['timeout']) ? $$cnf['timeout'] : DEFAULT_CURL_TIMEOUT;
   $visitorIp = $_SERVER['REMOTE_ADDR']; // Get visitor's IP
   $uid = getUserID($visitorIp);
   $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
@@ -588,7 +721,7 @@ function recordToMatomo() {
   if (!isset($dnt) || $dnt !== true) {
     $params['cip'] = $visitorIp;
     $params['cdt'] = date("c");
-    $params['token_auth'] = (isset($config->matomo['token_auth']) ? $config->matomo['token_auth'] : "");
+    $params['token_auth'] = (isset($cnf['token_auth']) ? $cnf['token_auth'] : "");
   }
 
   $curl = curl_init();
@@ -629,17 +762,13 @@ function csv_encode($data) {
  * !! WARNING : Don't use this is a high volume site, log files are not managed
  */
 function recordToLogFile() {
-  global $logfile, $config, $command, $short;
+  global $logfile, $command, $short;
 
-  if (!property_exists($config, 'log') || !isset($config->log) || ($config->log === false)) {
-    return false;
-  }
+  $logfile = config('log');
+  if (false === $logfile) return false;
 
-  if (!isset($logfile)) {
-    $logfile = $config->log;
-    if ($logfile === true ) { $logfile = 'log_file.log'; }
-    $logfile = add_trailing_slash(__DIR__) . $logfile;
-  }
+  if ($logfile === true) $logfile = 'log_file.log';
+  $logfile = add_trailing_slash(__DIR__) . $logfile;
 
   $visitorIp = $_SERVER['REMOTE_ADDR'] ?? '-'; // Get visitor's IP
   $message = [
@@ -674,7 +803,7 @@ function main() {
 
   // Initialize Globals
   $command = $promise = $content = $short = $url = $expiry = false;
-  $config = (object) $config;
+  $config = objectToArray($config);
   if (!isset($urls)) $urls = false;
 
   header('X-Powered-By: ClickIt-URL-Shortener', true);
@@ -683,32 +812,54 @@ function main() {
   processQueryString('f');  // Internal files, e.g. logo
 
   /*
-  * Note: Data will always load from in-file '$config->json_data_filename',
-  * but once loaded the content of the json may override the $config object.
-  */
-  if ($command === false) {
-    if ((false === $urls) && file_exists($config->json_data_filename)) {
-      $json_data = json_decode_helper( @file_get_contents($config->json_data_filename) );
-      if ((null == $json_data) || (JSON_ERROR_NONE !== json_last_error()) ) {
-        $command = 'e';
-        $content = '<p>JSON error <b>' . json_last_error_text() . '</b> in file <code>' . $config->json_data_filename . '</code></p>';
-        $promise = 500;
-      } else {
-        if (isset($json_data['urls'])) $urls = $json_data['urls'];
-        if (isset($json_data['config'])) $config = (object) array_merge( (array) $config, $json_data['config'] );
-      }
+   * Note: Data will always load from in-file `$config['json_data_filename']`,
+   * but once loaded the content of the json may override the $config object.
+   */
+  if (false === $command) {
 
-      if ($urls !== false) {
-        $urls = array_change_key_case($urls, CASE_LOWER); // Case insensitive shorts
+    $c = config('crud');
+    if (false !== $c) crud_setup($c);
+
+    $h = config('json_data_filename');
+    $h = file_exists($h) ? crud_connect($h) : false;
+    if (false === $h) $error = crud_get_error();
+    if (!$error) {
+      if ((false === $h) && (false === $urls)) {
+        // JSON file not there, ask for it; a.k.a. needs install
+        $command = 'x';
+      } else {
+        $tmp_config = crud_read($h, 'config');
+        $e_config = crud_get_error();
+        if (!!$e_config) {
+          $error = $e_config;
+        } else if (($tmp_config !== false) && is_array($tmp_config)) {
+          $config = new_array_merge( (array) $config, $tmp_config );
+        }
+
+        $urls = crud_read($h, 'urls');
+        $e_urls = crud_get_error();
+        if (!!$e_urls) {
+          $error = $e_urls;
+        } else if ($urls !== false) {
+          $urls = array_change_key_case($urls, CASE_LOWER); // Case insensitive shorts
+          // if (DEBUG) {
+          //   echo '<!--' . PHP_EOL;
+          //   var_dump_ret($urls, '$urls', true);
+          //   echo PHP_EOL . '-->';
+          // }
+        }
       }
-    } else {
-      // JSON file not there, ask for it; a.k.a. needs install
-      $command = 'x';
     }
+    if (!!$error) {
+      $command = 'e';
+      $content = '<p>JSON error <b>' . $error . '</b> in file <code>' . config('json_data_filename') . '</code></p>';  // fixme : better message
+      $promise = 500;
+    }
+    if ($h) crud_disconnect($h);
   }
 
   if (DEBUG) {
-    if (isset($config->base_url)) unset($config->base_url);
+    if (isset($config['base_url'])) unset($config['base_url']);
   }
 
   processQueryString('e');  // Errors
@@ -821,19 +972,14 @@ function main() {
    * └─────────────────────────────────┘
    */
 
-  $title = $config->default_title;
+  $title = config('title') ?: 'ClickIt-URL-Shortener';
   $inc_fa = false;
   $inc_js = false;
   $inc_highlighter = false;
   $color = 'default';
 
-  if (property_exists($config, 'matomo') && isset($config->matomo)) {
-    recordToMatomo();
-  }
-
-  if (property_exists($config, 'log') && isset($config->log) && ($config->log !== false)) {
-    recordToLogFile();
-  }
+  if (false !== config('matomo')) recordToMatomo();
+  if (false !== config('log')) recordToLogFile();
 
   switch ($command) {
 
@@ -845,7 +991,7 @@ function main() {
       if (DEBUG) {
         $filename = getCurrentUrl() . '?u=' . $short . '@';
       } else {
-        $filename = generateQRCodeURL($url, $config->qr_code_engine);
+        $filename = generateQRCodeURL($url, config('qr_code_engine'));
       }
       $content = '<p class="">';
       if (!empty($short)) $content .= 'Short URL = <code>' . $short . '</code><br>';
@@ -867,11 +1013,13 @@ function main() {
       // 'qr_content_type' => 'image/svg+xml',
       // 'qr_file_ext' => '.svg',
 
-      $url = generateQRCodeURL($url, $config->qr_code_engine);
+      $url = generateQRCodeURL($url, config('qr_code_engine'));
 
-      if (isset($config->qr_content_type)) {
-        $filename = isset($config->qr_file_ext) ? sanitize($short) . $config->qr_file_ext : false;
-        http_get_and_print_remote_file($url, $config->qr_content_type, $filename);
+      $ct = config('qr_content_type');
+      if (false !== $ct) {
+        $fx = config('qr_file_ext');
+        $filename = (false !== $fx) ? sanitize($short) . $fx : false;
+        http_get_and_print_remote_file($url, $ct, $filename);
       } else {
         http_response_redirection($url, 307, 0);  // always 307, always no-cache
       }
@@ -938,11 +1086,11 @@ function main() {
         global $semaphore;
         $semaphore = true;
 
-        @include_once( $fn );  // load the plugin
+        @include_once($fn); // load the plugin
 
         $cnf = 'plugin_' . $url;  // extract configuration from config
-        if (isset($config->$cnf)) {
-          $cnf = json_decode(json_encode($config->$cnf), true);  // nasty, but can go deep
+        if (isset($config[$cnf])) {  // don't use config(), we want the address pointer
+          $cnf =& $config[$cnf];
         } else {
           $cnf = array();
         }
@@ -955,11 +1103,9 @@ function main() {
           switch ($special) {
             case '@':
               $fn .= '_at';
-              $cnf['qr_code_engine'] = $config->qr_code_engine;
-              if (isset($config->qr_content_type))
-                $cnf['qr_content_type'] = $config->qr_content_type;
-              if (isset($config->qr_file_ext))
-                $cnf['qr_file_ext'] = $config->qr_file_ext;
+              $cnf['qr_code_engine'] = config('qr_code_engine');
+              $cnf['qr_content_type'] = config('qr_content_type') ?: false;
+              $cnf['qr_file_ext'] = config('qr_file_ext') ?: false;
               break;
             case '-':
               $fn .= '_dash';
@@ -1080,8 +1226,8 @@ function main() {
       // --- No JSON file ---
 
       $heading = '<b class="text-danger">Error:</b> Site not set up';
-
-      $content = '<p class="card-text">File <code>' . $config->json_data_filename . '</code> not found.</p>
+      $e_msg = ($error == false) ? 'not found' : "can't be read with " . $error;
+      $content = '<p class="card-text">File <code>' . config('json_data_filename') . '</code> ' . $e_msg . '.</p>
     <p class="card-text">Please create this file on the base folder of the server with the following content:<br>
     <pre class="border p-1 shadow"><code class="language-json">{
     "urls": {
@@ -1199,12 +1345,12 @@ function main() {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <link rel="stylesheet" href="<?= $config->bootstrap_css['url'] ?>" integrity="<?= $config->bootstrap_css['hash'] ?>" crossorigin="anonymous" media="all">
+  <link rel="stylesheet" href="<?= config('bootstrap_css', 'url') ?>" integrity="<?= config('bootstrap_css', 'hash') ?>" crossorigin="anonymous" media="all">
 <?php if ($inc_fa) { ?>
-  <link rel="stylesheet" href="<?= $config->fontawesome_css['url'] ?>" integrity="<?= $config->fontawesome_css['hash'] ?>" crossorigin="anonymous" media="all">
+  <link rel="stylesheet" href="<?= config('fontawesome_css', 'url') ?>" integrity="<?= config('fontawesome_css', 'hash') ?>" crossorigin="anonymous" media="all">
 <?php } ?>
 <?php if ($inc_highlighter) { ?>
-  <link rel="stylesheet" href="<?= $config->highlight_css['url'] ?>" integrity="<?= $config->highlight_css['hash'] ?>" crossorigin="anonymous">
+  <link rel="stylesheet" href="<?= config('highlight_css', 'url') ?>" integrity="<?= config('highlight_css', 'hash') ?>" crossorigin="anonymous">
 <?php } ?>
   <link rel="apple-touch-icon" href="<?= add_trailing_slash(getCurrentUrl()) . '?f=favicon.png' ?>">
   <link rel="icon" type="image/png" href="<?= add_trailing_slash(getCurrentUrl()) . '?f=favicon.png' ?>">
@@ -1216,9 +1362,13 @@ function main() {
     .logo { max-height: 64px; max-width: 100%; }
     .card-body p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   </style>
-<?php if (isset($config->extra_css) && !empty($config->extra_css)) { echo $config->extra_css . PHP_EOL; } ?>
+<?php
+  echo config('extra_head') . PHP_EOL;
+  echo '<style>' . config('extra_css') . '</style>' . PHP_EOL;
+?>
 </head>
 <body>
+  <?php echo config('extra_header') . PHP_EOL; ?>
   <div class="wrapper">
 
     <div class="dialog card border shadow-lg text-center border-<?= $color ?> rounded-4">
@@ -1232,21 +1382,23 @@ function main() {
         <a href="<?= $href ?>" class="btn btn-outline-primary"><?= $btn_text ?></a>
       </div>
 <?php } ?>
-<?php if (!empty($config->copyright)) { ?>
-      <div class="card-footer text-muted small"><?= $config->copyright ?></div>
+<?php $cr = config('copyright'); if (DEBUG || (false !== $cr && !empty($cr))) { ?>
+      <div class="card-footer text-muted small"><?= $cr ?><?php if (DEBUG) { echo ' <span class="text-danger" title="DEBUG">☆</span>'; } ?></div>
 <?php } ?>
     </div>
 
   </div>
 <?php if ($inc_js) { ?>
-  <?php /* <script src="<?= $config->popper_js['url'] ?>" integrity="<?= $config->popper_js['hash'] ?>" crossorigin="anonymous"></script> */ ?>
-  <script src="<?= $config->bootstrap_js['url'] ?>" integrity="<?= $config->bootstrap_js['hash'] ?>" crossorigin="anonymous"></script>
+  <script src="<?= config('bootstrap_js', 'url') ?>" integrity="<?= config('bootstrap_js', 'hash') ?>" crossorigin="anonymous"></script>
 <?php } ?>
 <?php if ($inc_highlighter) { ?>
-  <script src="<?= $config->highlight_js['url'] ?>" integrity="<?= $config->highlight_js['hash'] ?>" crossorigin="anonymous"></script>
+  <script src="<?= config('highlight_js', 'url') ?>" integrity="<?= config('highlight_js', 'hash') ?>" crossorigin="anonymous"></script>
   <script>hljs.highlightAll();</script>
 <?php } ?>
-<?php if (isset($config->extra_js) && !empty($config->extra_js)) { echo $config->extra_js . PHP_EOL; } ?>
+<?php
+  echo config('extra_footer') . PHP_EOL;
+  echo '<script>' . config['extra_js'] . '</script>' . PHP_EOL;
+?>
 
 <?php
   // Either Matomo tracking or Log File are ON, AND cookie not set, AND the Do Not Track is NOT set
@@ -1306,17 +1458,17 @@ function main() {
   });
 </script>
 <?php
-    }
+  } // isset($dnt)
 
-    $analiticsHtml = __DIR__ . '/analitics.html';
-    if (file_exists($analiticsHtml)) {
-      $contents = @file_get_contents($analiticsHtml);
-      if ($contents !== false) {
-        echo $contents;
-      } else {
-        echo "<!-- Unable to read " . $analiticsHtml . " file. -->";
-      }
+  $analiticsHtml = __DIR__ . '/analitics.html';
+  if (file_exists($analiticsHtml)) {
+    $contents = @file_get_contents($analiticsHtml);
+    if ($contents !== false) {
+      echo $contents;
+    } else {
+      echo "<!-- Unable to read " . $analiticsHtml . " file. -->";
     }
+  }
 ?>
 </body>
 </html>
