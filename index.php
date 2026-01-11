@@ -23,7 +23,7 @@ if (DEBUG) {
   error_reporting(E_ALL);
 }
 
-global $config, $command, $promise, $content, $short, $url, $error;
+global $config, $images, $command, $promise, $content, $short, $url, $error;
 
 /*
  * You can skip using an external URLs file by populating your list right here.
@@ -799,7 +799,7 @@ if (!isset($GLOBALS['semaphore'])) {
 }
 
 function main() {
-  global $config, $command, $promise, $content, $short, $url, $error;
+  global $config, $images, $command, $promise, $content, $short, $url, $error;
 
   // Initialize Globals
   $command = $promise = $content = $short = $url = $expiry = false;
@@ -931,10 +931,7 @@ function main() {
         $expiry = false;
 
         $_dst = parse_destination($dest);
-        if (isset($ret['c'])) {
-          unset($promise['plugin']); // fixme: do I need this?
-          $command = $ret['c'];
-        }
+        if (isset($_dst['c'])) $command = $_dst['c']; // is this a plugin?
         $url = $_dst['u'];
         $promise = $_dst['p'];
         $expiry = $_dst['x'];
@@ -1186,7 +1183,8 @@ function main() {
           $promise = 404;
         }
       }
-
+      $promise = 418; // I'm a teapot
+      $error = 'Images array missing';
       $command = 'e';  // if you got here then you're in error
       break;
 
@@ -1352,9 +1350,9 @@ function main() {
 <?php if ($inc_highlighter) { ?>
   <link rel="stylesheet" href="<?= config('highlight_css', 'url') ?>" integrity="<?= config('highlight_css', 'hash') ?>" crossorigin="anonymous">
 <?php } ?>
-  <link rel="apple-touch-icon" href="<?= add_trailing_slash(getCurrentUrl()) . '?f=favicon.png' ?>">
-  <link rel="icon" type="image/png" href="<?= add_trailing_slash(getCurrentUrl()) . '?f=favicon.png' ?>">
-  <link rel="icon" type="image/svg+xml" href="<?= add_trailing_slash(getCurrentUrl()) . '?f=icon.svg' ?>" sizes="any">
+  <link rel="apple-touch-icon" href="<?= strip_trailing_slash(getCurrentUrl()) . '?f=favicon.png' ?>">
+  <link rel="icon" type="image/png" href="<?= strip_trailing_slash(getCurrentUrl()) . '?f=favicon.png' ?>">
+  <link rel="icon" type="image/svg+xml" href="<?= strip_trailing_slash(getCurrentUrl()) . '?f=icon.svg' ?>" sizes="any">
   <title><?= $title ?></title>
   <style>
     .wrapper { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
@@ -1372,7 +1370,7 @@ function main() {
   <div class="wrapper">
 
     <div class="dialog card border shadow-lg text-center border-<?= $color ?> rounded-4">
-      <h5 class="card-header bg-<?= $color ?> px-5 py-3 border-<?= $color ?> rounded-top-4 bg-opacity-25"><img src="<?= add_trailing_slash(getCurrentUrl()) . '?f=logo.svg' ?>" class="logo"></h5>
+      <h5 class="card-header bg-<?= $color ?> px-5 py-3 border-<?= $color ?> rounded-top-4 bg-opacity-25"><img src="<?= strip_trailing_slash(getCurrentUrl()) . '?f=logo.svg' ?>" class="logo"></h5>
       <div class="card-body text-left">
         <h1 class="card-title text-center"><?= $heading ?></h1>
         <?= $content ?>
@@ -1397,7 +1395,7 @@ function main() {
 <?php } ?>
 <?php
   echo config('extra_footer') . PHP_EOL;
-  echo '<script>' . config['extra_js'] . '</script>' . PHP_EOL;
+  echo '<script>' . config('extra_js') . '</script>' . PHP_EOL;
 ?>
 
 <?php
