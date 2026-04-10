@@ -24,6 +24,7 @@ if (!isset($GLOBALS['semaphore'])) {
 
 const DEBUG_VC = false;
 const PHP_CRLF = "\r\n";  // VCard spec requires CR LF line ends.
+const VCARD_EXT = ".vcf";
 
 // ========== Helpers ==========
 
@@ -160,7 +161,7 @@ function f_vcard_generateQRCodeURL($data, $qr_code_engine) {
 function f_vcard_redirection($data, $config = false) {
   $data = f_vcard_sanitizeData($data);
 
-  $filename = f_vcard_normalizeFileName( $data['name']['first'] . ' ' . $data['name']['last'] . '.vcard' );
+  $filename = f_vcard_normalizeFileName( $data['name']['first'] . '_' . $data['name']['last'] . VCARD_EXT );
   header('Content-Type: ' . (DEBUG_VC ? 'text/plain' : 'text/vcard'), true);
   header('Content-Disposition: inline; filename="' .  $filename . '"');
 
@@ -186,7 +187,7 @@ function f_vcard_redirection_at($data, $config = false) {
       $vcard = f_vcard_generateVCard($data);
       $remote_url = f_vcard_generateQRCodeURL($vcard, $config['qr_code_engine']);
     }
-    $filename = f_vcard_normalizeFileName( $data['name']['first'] . ' ' . $data['name']['last'] . $config['qr_file_ext'] );
+    $filename = f_vcard_normalizeFileName( $data['name']['first'] . '_' . $data['name']['last'] . $config['qr_file_ext'] );
 
     return http_get_and_print_remote_file($remote_url, $config['qr_content_type'], $filename);
   } else {

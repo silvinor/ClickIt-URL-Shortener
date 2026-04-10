@@ -922,7 +922,8 @@ function main() {
 
       while ( __is_hash($dest) ) {
         $promise = substr($dest, 1);
-        $dest = isset($urls[$promise]) ? strtolower($urls[$promise]) : false;
+        $dest = isset($urls[$promise]) ? $urls[$promise] : false;
+        if (is_string($dest)) $dest = strtolower($dest);
       }
 
       if (false !== $dest) {
